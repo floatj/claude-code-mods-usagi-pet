@@ -1,0 +1,6 @@
+{
+  "name": "bunny",
+  "version": "0.1.0",
+  "description": "兔兔: an animated rabbit pet docked beside the transcript, reacting to what Claude is doing",
+  "types": "./types/index.d.ts"
+}
