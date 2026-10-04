@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Mood } from '../types'
 import {
@@ -15,6 +15,8 @@ import {
   step,
   TICK_MS,
 } from './bunny'
+import { advance, close, CLOSED, GAME_TICK_MS, LANE_WIDTH, LANES, start, steer, trackOf } from './game'
+import type { Cell } from './game'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
@@ -25,17 +27,54 @@ const SHIFT_LEFT = 3
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
+const game = atom({ plugin: 'bunny', key: 'game' } as const, CLOSED)
+
+const TRACK_COLOR: Record<Cell['kind'], string | undefined> = {
+  empty: undefined,
+  train: '#ff5f5f',
+  coin: '#ffd700',
+  rabbit: BODY_COLOR,
+}
+
+// The game's clock, running only while a run is on.
+let ticker: Timer | undefined
+
+const halt = () => {
+  ticker?.cancel()
+  ticker = undefined
+}
+
+const play = async ($: EngineInterface) => {
+  halt()
+  await update($, game, start)
+  void $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS, focus: true })
+  ticker = $.clock.every(GAME_TICK_MS, () => {
+    void update($, game, g => advance(g, Math.random())).then(() =>
+      read($, game).then(g => {
+        if (g.isOver || !g.isOpen) {
+          halt()
+        }
+      }),
+    )
+  })
+}
+
+const leave = async ($: EngineInterface) => {
+  halt()
+  await update($, game, close)
+}
 
 export const register: Register = on => {
   // Tool calls in flight: the bunny works until the last one answers.
   let running = 0
-
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'bunny',
       description: '叫出兔兔 (open the bunny pane)',
     })
     void $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
+    // A reload drops the game's clock, so a run left open would stand still.
+    await update($, game, close)
     $.clock.every(TICK_MS, () => {
       void $.clock.now().then(now => update($, pet, b => step(b, now)))
     })
@@ -89,8 +128,54 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const b = await read($, pet)
     const { bodyColumns, scroll } = e.props
+    const g = await read($, game)
+
+    if (g.isOpen) {
+      // The lane lines are drawn only where the pane is wide enough for them.
+      const hasLines = bodyColumns >= LANES * LANE_WIDTH + LANES + 1
+      const line = hasLines ? <Text dimColor>┆</Text> : null
+
+      return (
+        <Box
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="flex-end"
+          width={bodyColumns}
+          height={scroll.bodyRows}
+          backgroundColor={BACKGROUND}
+        >
+          <Text color={g.isOver ? '#ff5f5f' : undefined}>
+            {g.isOver ? `撞到了！${g.score} 分` : `分數 ${g.score}`}
+          </Text>
+          <Text dimColor>最高 {g.best}</Text>
+          {trackOf(g).map(cells => (
+            <Box>
+              {cells.map(cell => (
+                <Box>
+                  {line}
+                  <Text color={TRACK_COLOR[cell.kind]}>{cell.text}</Text>
+                </Box>
+              ))}
+              {line}
+            </Box>
+          ))}
+          <Text> </Text>
+          {g.isOver ? (
+            <Button key="again" label="再玩一次" hotkey="r" onPress={() => play($)} />
+          ) : (
+            <Box gap={1}>
+              <Button key="left" label="←" hotkey="a" onPress={() => update($, game, one => steer(one, -1))} />
+              <Button key="right" label="→" hotkey="d" onPress={() => update($, game, one => steer(one, 1))} />
+            </Box>
+          )}
+          <Text dimColor>{g.isOver ? 'r 再玩' : 'a ← 移動 → d'}</Text>
+          <Button key="exit" label="X" hotkey="x" onPress={() => leave($)} />
+        </Box>
+      )
+    }
+
+    const b = await read($, pet)
     const [fx] = frameOf(b)
     const scene = sceneOf(b, bodyColumns >= SCENE_WIDTH)
     const width = Math.min(SCENE_WIDTH, bodyColumns)
@@ -124,18 +209,21 @@ export const register: Register = on => {
         <Text key="caption" color={color}>
           {captionOf(b)}
         </Text>
-        <Button
-          key="pet"
-          label="♡"
-          hotkey="p"
-          onPress={async () => {
-            const now = await $.clock.now()
-            await update($, pet, one => ({
-              ...setMood(one, 'love', now),
-              pets: one.pets + 1,
-            }))
-          }}
-        />
+        <Box gap={1}>
+          <Button
+            key="pet"
+            label="♡"
+            hotkey="p"
+            onPress={async () => {
+              const now = await $.clock.now()
+              await update($, pet, one => ({
+                ...setMood(one, 'love', now),
+                pets: one.pets + 1,
+              }))
+            }}
+          />
+          <Button key="game" label="跑酷" hotkey="g" onPress={() => play($)} />
+        </Box>
         {b.pets > 0 && <Text dimColor>♡ × {b.pets}</Text>}
         </Box>
       </Box>

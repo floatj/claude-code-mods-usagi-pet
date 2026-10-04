@@ -21,8 +21,24 @@ export type Bunny = {
   pets: number
 }
 
+export type Game = {
+  /** Whether the pane shows the game in place of the rabbit's desk. */
+  isOpen: boolean
+  isOver: boolean
+  /** The lane she stands in, 0 the leftmost. */
+  lane: number
+  /** The track from the far end to her row, one character per lane. */
+  rows: string[]
+  score: number
+  /** The best score of this session. */
+  best: number
+  tick: number
+  /** Rows the track has moved, which decides where the clear rows fall. */
+  moved: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    bunny: { pet: Bunny }
+    bunny: { pet: Bunny; game: Game }
   }
 }
