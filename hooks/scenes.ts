@@ -201,8 +201,8 @@ const LEGS: Record<Feet, readonly string[]> = {
   b: ['...F...F...', '....a...a..'],
   tuck: ['...a...a...'],
 }
-// Landed from a hop, or sat down: a row shorter, her skirt spread about her and her legs folded out to the sides.
-const SQUASHED = ['.AAAFFFAAA.', 'AAAAFFFAAAA', 'aFFF...FFFa']
+// Landed from a hop, or sat down: a row shorter, her skirt spread about her.
+const SQUASHED = ['.AAAFFFAAA.', 'AAAAFFFAAAA', '...a...a...']
 
 type Pose = {
   x?: number
@@ -291,10 +291,12 @@ const rabbit = (s: Shot, pose: Pose = {}) => {
   // Her dress first: a nodding head comes down over the collar.
   paint(c, x, top + 10, [SHOULDERS, HANDS[arms], ...(isSquashed ? SQUASHED : [...SKIRT, ...LEGS[feet]])])
 
-  // Lace along her hem, teeth half a pixel wide either side of the apron.
-  for (const dx of [1, 2, 3]) {
-    split(c, x + dx, top + 13, INKS.A!, INKS.F!)
-    split(c, x + 10 - dx, top + 13, INKS.F!, INKS.A!)
+  if (!isSquashed) {
+    // Lace along her hem, teeth half a pixel wide either side of the apron.
+    for (const dx of [1, 2, 3]) {
+      split(c, x + dx, top + 13, INKS.A!, INKS.F!)
+      split(c, x + 10 - dx, top + 13, INKS.F!, INKS.A!)
+    }
   }
 
   if (arms === 'up') {
@@ -404,7 +406,7 @@ const SCENES = {
 
   idle: {
     draw: s => {
-      rabbit(s, { isSquashed: true })
+      rabbit(s)
       laptop(s, RESTING, INKS.C!)
     },
   },
@@ -424,7 +426,7 @@ const SCENES = {
   type: {
     draw: s => {
       // Her hand taps the keys, a pixel out and back.
-      rabbit(s, { eyes: s.t % 24 === 0 ? 'closed' : 'right', arms: s.t % 2 ? 'right' : 'down', isSquashed: true })
+      rabbit(s, { eyes: s.t % 24 === 0 ? 'closed' : 'right', arms: s.t % 2 ? 'right' : 'down' })
       laptop(s, pick(SCREENS, Math.floor(s.t / 3)))
     },
   },
