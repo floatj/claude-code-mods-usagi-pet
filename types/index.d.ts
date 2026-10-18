@@ -14,6 +14,10 @@ export type Bunny = {
   since: number
   /** Animation frame counter, one per clock period. */
   tick: number
+  /** The `tick` the mood began on: a passing mood's scene plays from it. */
+  moodTick: number
+  /** The `tick` the turn began on: a long turn's acts count from it. */
+  turnTick: number
   /** The tool in flight while `working`. */
   tool: string
   /** Whether a turn is running, so a passing mood returns to `thinking`. */

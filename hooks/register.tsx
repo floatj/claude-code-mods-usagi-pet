@@ -2,28 +2,19 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Mood } from '../types'
-import {
-  BODY_COLOR,
-  captionOf,
-  COLOR,
-  frameOf,
-  INITIAL,
-  LAPTOP_COLOR,
-  SCENE_WIDTH,
-  sceneOf,
-  setMood,
-  step,
-  TICK_MS,
-} from './bunny'
+import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
 import { advance, close, CLOSED, GAME_TICK_MS, LANE_WIDTH, LANES, start, steer, trackOf } from './game'
 import type { Cell } from './game'
+import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, sceneOf, STAGE_ROWS } from './scenes'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
 const COLUMNS = 22
 const ROWS = 12
-// Cells kept free between the rabbit's group and the pane's right edge.
+// Cells kept free between the rabbit's stage and the pane's right edge.
 const SHIFT_LEFT = 3
+// Asleep she breathes slowly: her frame moves on one clock period in this many.
+const SLEEP_EVERY = 4
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
@@ -33,8 +24,14 @@ const TRACK_COLOR: Record<Cell['kind'], string | undefined> = {
   empty: undefined,
   train: '#ff5f5f',
   coin: '#ffd700',
-  rabbit: BODY_COLOR,
+  rabbit: FUR_COLOR,
 }
+
+// The spinner's word, read while it draws. State cannot be written during a
+// render, so it lives here; the frame clock's redraws pick it up.
+let word = ''
+// Where this session's rotation of scenes starts.
+let seed = 0
 
 // The game's clock, running only while a run is on.
 let ticker: Timer | undefined
@@ -75,8 +72,18 @@ export const register: Register = on => {
     void $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
     // A reload drops the game's clock, so a run left open would stand still.
     await update($, game, close)
-    $.clock.every(TICK_MS, () => {
-      void $.clock.now().then(now => update($, pet, b => step(b, now)))
+    seed = Math.floor(await $.clock.now()) % 997
+    let period = 0
+    $.clock.every(FRAME_MS, () => {
+      period += 1
+      void read($, pet).then(async b => {
+        if (b.mood === 'sleepy' && period % SLEEP_EVERY !== 0) {
+          return
+        }
+
+        const now = await $.clock.now()
+        await update($, pet, one => step(one, now))
+      })
     })
 
     return next(e)
@@ -90,7 +97,7 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     const now = await $.clock.now()
-    await update($, pet, b => ({ ...setMood(b, 'shock', now), isBusy: true }))
+    await update($, pet, b => ({ ...setMood(b, 'shock', now), isBusy: true, turnTick: b.tick }))
 
     return next(e)
   })
@@ -122,6 +129,13 @@ export const register: Register = on => {
       ...setMood(b, b.mood === 'sad' ? 'sad' : 'happy', now),
       isBusy: false,
     }))
+
+    return next(e)
+  })
+
+  // Observe only: remember what the spinner says, and let the engine draw it.
+  on('ui.render', { component: 'Spinner' }, ($, e, next) => {
+    word = e.props.message ?? e.props.word
 
     return next(e)
   })
@@ -175,10 +189,10 @@ export const register: Register = on => {
       )
     }
 
-    const b = await read($, pet)
-    const [fx] = frameOf(b)
-    const scene = sceneOf(b, bodyColumns >= SCENE_WIDTH)
-    const width = Math.min(SCENE_WIDTH, bodyColumns)
+    // A rabbit kept from before a reload may lack what was added since.
+    const b = { ...INITIAL, ...(await read($, pet)) }
+    const width = Math.max(1, Math.min(bodyColumns, MAX_STAGE))
+    const stage = frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick)
     const color = COLOR[b.mood]
 
     return (
@@ -191,21 +205,18 @@ export const register: Register = on => {
         height={scroll.bodyRows}
         backgroundColor={BACKGROUND}
       >
-        <Box flexDirection="column" width={width}>
-        <Box width={width}>
-          <Text color={color}>{fx}</Text>
+        <Box flexDirection="column" alignItems="center" width={width}>
+        <Box flexDirection="column" width={width} height={STAGE_ROWS}>
+          {stage.map(runs => (
+            <Text>
+              {runs.map(run => (
+                <Text color={run.color} backgroundColor={run.bg ?? BACKGROUND}>
+                  {run.text}
+                </Text>
+              ))}
+            </Text>
+          ))}
         </Box>
-        {scene.map(([rabbit, laptop]) => (
-          <Box width={width}>
-            <Text color={BODY_COLOR}>
-              {rabbit}
-            </Text>
-            <Text color={LAPTOP_COLOR}>
-              {laptop}
-            </Text>
-          </Box>
-        ))}
-        <Text> </Text>
         <Text key="caption" color={color}>
           {captionOf(b)}
         </Text>
