@@ -23,13 +23,13 @@ const FLOOR = (STAGE_ROWS - SKY) * 2
 const SPRITE = 11
 const SPRITE_ROWS = 16
 // The columns she and a prop beside her take; on a narrower stage she is drawn alone.
-const ROOMY = 18
+const ROOMY = 20
 const PROP_X = SPRITE
 
 /** The white of her ears and apron. */
 export const FUR_COLOR = '#f6f4ef'
 /** The laptop's own color, apart from the rabbit's. */
-export const LAPTOP_COLOR = '#af87ff'
+export const LAPTOP_COLOR = '#9cc3f5'
 
 const GRAY = '#8a9096'
 const RED = '#ff5f5f'
@@ -58,7 +58,8 @@ const INKS: Record<string, string> = {
   V: '#a8dcf5', // gloves
   H: '#ff4d6d', // heart
   U: LAPTOP_COLOR,
-  u: '#7a5fd0',
+  u: '#5b8fd8',
+  Q: '#cfe2fb', // the keyboard
   W: '#ececec',
   w: '#aab0b6',
   s: GRAY,
@@ -108,7 +109,7 @@ const dot = (c: Canvas, x: number, y: number, color: string) => {
 }
 
 /** Splits a painted pixel in two, drawn so where its cell can show it. */
-const split = (c: Canvas, x: number, y: number, left: string, right: string) => {
+const split = (c: Canvas, x: number, y: number, left: string | undefined, right: string | undefined) => {
   const line = c.halves[y + SKY * 2]
 
   if (line && x >= 0 && x < c.width) {
@@ -200,8 +201,8 @@ const LEGS: Record<Feet, readonly string[]> = {
   b: ['...F...F...', '....a...a..'],
   tuck: ['...a...a...'],
 }
-// Landed from a hop, or sat down: a row shorter, her skirt spread about her.
-const SQUASHED = ['.AAAFFFAAA.', 'AAAAFFFAAAA', '...a...a...']
+// Landed from a hop, or sat down: a row shorter, her skirt spread about her and her legs folded out to the sides.
+const SQUASHED = ['.AAAFFFAAA.', 'AAAAFFFAAAA', 'aFFF...FFFa']
 
 type Pose = {
   x?: number
@@ -290,12 +291,10 @@ const rabbit = (s: Shot, pose: Pose = {}) => {
   // Her dress first: a nodding head comes down over the collar.
   paint(c, x, top + 10, [SHOULDERS, HANDS[arms], ...(isSquashed ? SQUASHED : [...SKIRT, ...LEGS[feet]])])
 
-  if (!isSquashed) {
-    // Lace along her hem, teeth half a pixel wide either side of the apron.
-    for (const dx of [1, 2, 3]) {
-      split(c, x + dx, top + 13, INKS.A!, INKS.F!)
-      split(c, x + 10 - dx, top + 13, INKS.F!, INKS.A!)
-    }
+  // Lace along her hem, teeth half a pixel wide either side of the apron.
+  for (const dx of [1, 2, 3]) {
+    split(c, x + dx, top + 13, INKS.A!, INKS.F!)
+    split(c, x + 10 - dx, top + 13, INKS.F!, INKS.A!)
   }
 
   if (arms === 'up') {
@@ -346,18 +345,24 @@ const SCREENS: readonly (readonly [string, string])[] = [
   ['▪ ▪▪▪', '>_   '],
 ]
 // What it shows while nobody types: its maker's name.
-const CLOSED = ['NZXT ', '     '] as const
+// Idle, the screen saver: her own face.
+const RESTING = ['     ', '(·ω·)'] as const
 
-const laptop = ({ c, isRoomy }: Shot, [top, bottom]: readonly [string, string], ink = GREEN) => {
+/** Her laptop on a low table, a column clear of her; shut, just its lid on the keyboard. */
+const laptop = ({ c, isRoomy }: Shot, [top, bottom]: readonly [string, string], ink = GREEN, isShut = false) => {
   if (!isRoomy) {
     return
   }
 
-  paint(c, PROP_X, 5, ['UUUUUUU', 'U.....U', 'U.....U', 'U.....U', 'U.....U', 'uuuuuuu'])
-  write(c, PROP_X + 1, 3, top.padEnd(5), ink, SCREEN)
-  write(c, PROP_X + 1, 4, bottom.padEnd(5), ink, SCREEN)
-  // On a desk, the keyboard a cell toward her at the height of her hands.
-  paint(c, PROP_X - 1, 11, ['UUUUUUUU', 'NNNNNNNN', '.n....n.', '.n....n.', '.n....n.'])
+  if (isShut) {
+    paint(c, PROP_X + 1, 12, ['uuuuuuu'])
+  } else {
+    paint(c, PROP_X + 1, 7, ['UUUUUUU', 'U.....U', 'U.....U', 'U.....U', 'U.....U', 'uuuuuuu'])
+    write(c, PROP_X + 2, 4, top.padEnd(5), ink, SCREEN)
+    write(c, PROP_X + 2, 5, bottom.padEnd(5), ink, SCREEN)
+  }
+
+  paint(c, PROP_X, 13, ['QQQQQQQQQ', 'NNNNNNNNN', '.n.....n.'])
 }
 
 const CARROT = ['.g.', 'GgG', 'OOO', 'OOO', 'oOo', '.O.', '.o.']
@@ -389,7 +394,7 @@ const SCENES = {
       // The clock runs slow while she sleeps: one breath every few seconds.
       // Sat down, her head nodding with it.
       rabbit(s, { ears: 'out', eyes: 'closed', isSquashed: true, nod: s.t % 4 < 2 ? 1 : 0, lift: 0 })
-      laptop(s, CLOSED, LAPTOP_COLOR)
+      laptop(s, RESTING, LAPTOP_COLOR, true)
       const z = s.t % 6
       write(s.c, 11, 1, z >= 1 ? 'z' : ' ', GRAY)
       write(s.c, 12, 0, z >= 2 ? 'Z' : ' ', GRAY)
@@ -399,8 +404,8 @@ const SCENES = {
 
   idle: {
     draw: s => {
-      rabbit(s)
-      laptop(s, CLOSED, LAPTOP_COLOR)
+      rabbit(s, { isSquashed: true })
+      laptop(s, RESTING, INKS.C!)
     },
   },
 
@@ -419,7 +424,7 @@ const SCENES = {
   type: {
     draw: s => {
       // Her hand taps the keys, a pixel out and back.
-      rabbit(s, { eyes: s.t % 24 === 0 ? 'closed' : 'right', arms: s.t % 2 ? 'right' : 'down' })
+      rabbit(s, { eyes: s.t % 24 === 0 ? 'closed' : 'right', arms: s.t % 2 ? 'right' : 'down', isSquashed: true })
       laptop(s, pick(SCREENS, Math.floor(s.t / 3)))
     },
   },
