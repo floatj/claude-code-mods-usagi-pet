@@ -52,7 +52,7 @@ claude plugin test ~/.claude/mods/bunny
 
 ## 致謝
 
-動畫的做法（依工具和 spinner 文字換場景、計時器推動畫格）參考了 Brian Huang 的 [clawd-actor](https://github.com/BrianHuang813/clawd-actor)（MIT 授權），少數小函式沿用它的寫法，授權聲明附在 [LICENSE](LICENSE)。
+動畫的做法（依工具和 spinner 文字換場景、計時器推動畫格）參考了 Brian Huang 的 [clawd-actor](https://github.com/BrianHuang813/clawd-actor)（MIT 授權），少數小函式沿用它的寫法，授權聲明附在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 授權
 
