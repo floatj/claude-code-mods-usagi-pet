@@ -44,17 +44,18 @@ const SCREEN = '#1b1b2f'
 const INKS: Record<string, string> = {
   F: FUR_COLOR,
   P: '#ff9db0', // inner ear
-  T: '#e9ecf7', // hair
-  t: '#b4bcda', // hair in shadow
+  T: '#cdd6ee', // hair
+  t: '#8f9cc4', // hair in shadow
   S: '#ffdfc8', // skin
   B: '#ff9fb2', // blush
   K: '#2a2530', // eye
   k: '#4f8ff7', // iris
   E: '#7a5a50', // a closed eye
-  M: '#e0607a', // mouth
   A: '#5b9bf0', // dress
   a: '#3565c0', // ribbon and shoes
   C: '#c8ecff', // a tear
+  D: '#ffffff', // diamond earrings
+  V: '#a8dcf5', // gloves
   H: '#ff4d6d', // heart
   U: LAPTOP_COLOR,
   u: '#7a5fd0',
@@ -74,16 +75,21 @@ const INKS: Record<string, string> = {
   I: '#4a4a55', // ink on paper
 }
 
-type Glyph = { ch: string; color?: string; bg?: string }
+/** `isWorn` by her: a pixel painted over its cell later hides it. */
+type Glyph = { ch: string; color?: string; bg?: string; isWorn?: boolean }
 type Canvas = {
   width: number
   px: (string | undefined)[][]
+  /** A pixel's left and right halves, where they differ; `px` is how it looks whole. */
+  halves: (Half | undefined)[][]
   glyphs: (Glyph | undefined)[][]
 }
+type Half = readonly [string | undefined, string | undefined]
 
 const canvasOf = (width: number): Canvas => ({
   width,
   px: Array.from({ length: PX_ROWS }, () => Array<string | undefined>(width).fill(undefined)),
+  halves: Array.from({ length: PX_ROWS }, () => Array<Half | undefined>(width).fill(undefined)),
   glyphs: Array.from({ length: STAGE_ROWS }, () => Array<Glyph | undefined>(width).fill(undefined)),
 })
 
@@ -92,6 +98,21 @@ const dot = (c: Canvas, x: number, y: number, color: string) => {
 
   if (line && x >= 0 && x < c.width) {
     line[x] = color
+    c.halves[y + SKY * 2]![x] = undefined
+    const worn = c.glyphs[Math.floor(y / 2) + SKY]
+
+    if (worn?.[x]?.isWorn) {
+      worn[x] = undefined
+    }
+  }
+}
+
+/** Splits a painted pixel in two, drawn so where its cell can show it. */
+const split = (c: Canvas, x: number, y: number, left: string, right: string) => {
+  const line = c.halves[y + SKY * 2]
+
+  if (line && x >= 0 && x < c.width) {
+    line[x] = [left, right]
   }
 }
 
@@ -164,12 +185,12 @@ const LOP = ['.FF.....FF.', 'FPF.....FPF', 'FP.......PF', 'FP.......PF', 'FF....
 const HEAD = ['..FAFFFAF..', '.TTTTTTTTT.', '.TTSTSTSTT.', '.TSSSSSSST.', '.TBSSSSSBT.', '.tTSSSSSTt.']
 // Puffed sleeves, a collar and its ribbon.
 const SHOULDERS = '.tAAFaFAAt.'
-// The row her hands are on, the apron's bib between them.
+// The row her gloved hands are on, the apron's bib between them.
 const HANDS: Record<Arms, string> = {
-  down: '.tSAFFFASt.',
+  down: '.tVAFFFAVt.',
   up: '.t.AFFFA.t.',
-  left: '.SAAFFFASt.',
-  right: '.tSAFFFAAS.',
+  left: '.VAAFFFAVt.',
+  right: '.tVAFFFAAV.',
 }
 const SKIRT = ['..AAFFFAA..', '.AAAFFFAAA.']
 // White stockings and blue shoes.
@@ -269,8 +290,16 @@ const rabbit = (s: Shot, pose: Pose = {}) => {
   // Her dress first: a nodding head comes down over the collar.
   paint(c, x, top + 10, [SHOULDERS, HANDS[arms], ...(isSquashed ? SQUASHED : [...SKIRT, ...LEGS[feet]])])
 
+  if (!isSquashed) {
+    // Lace along her hem, teeth half a pixel wide either side of the apron.
+    for (const dx of [1, 2, 3]) {
+      split(c, x + dx, top + 13, INKS.A!, INKS.F!)
+      split(c, x + 10 - dx, top + 13, INKS.F!, INKS.A!)
+    }
+  }
+
   if (arms === 'up') {
-    paint(c, x, top + 8, ['S.........S', 'S.........S'])
+    paint(c, x, top + 8, ['V.........V', 'V.........V'])
   }
 
   if (ears !== 'down') {
@@ -278,6 +307,16 @@ const rabbit = (s: Shot, pose: Pose = {}) => {
   }
 
   paint(c, x, head + 4, HEAD)
+
+  // White diamond earrings on the shadowed hair beside her cheeks; lop ears or a carrot cover them.
+  for (const at of [x + 1, x + 9]) {
+    const line = c.glyphs[Math.floor((head + 8) / 2) + SKY]
+
+    if (line && at >= 0 && at < c.width) {
+      line[at] = { ch: '◆', color: INKS.D!, bg: INKS.t!, isWorn: true }
+    }
+  }
+
   eyes(c, x, head + 7, pose.eyes ?? faceOf(s))
 
   if (ears === 'down') {
@@ -540,9 +579,8 @@ const SCENES = {
       }
 
       const chin = FLOOR - SPRITE_ROWS + 9
-      // Chewing: her mouth works at the tip.
-      dot(c, 5, chin, t % 2 ? INKS.M! : INKS.S!)
-      paint(c, 6, chin, ['O'.repeat(length) + 'Gg', 'o'.repeat(length) + 'g'])
+      // Chewing: the tip works at her lips, a pixel in and out.
+      paint(c, 6 - (t % 2), chin,['O'.repeat(length) + 'Gg', 'o'.repeat(length) + 'g'])
     },
   },
 
@@ -801,6 +839,23 @@ const cellOf = (above: string | undefined, below: string | undefined): Glyph => 
   return above === below ? { ch: '█', color: above } : { ch: '▀', color: above, bg: below }
 }
 
+// Quadrant characters by which quarters are lit: 1 upper left, 2 upper right, 4 lower left, 8 lower right.
+const QUADRANTS = ' ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█'
+
+// A cell with a split pixel is four quarters, drawn as a quadrant if two colors cover them.
+const quartersOf = (quarters: readonly (string | undefined)[]): Glyph | undefined => {
+  const colors = [...new Set(quarters)]
+  const color = colors.find(one => one !== undefined)
+
+  if (colors.length > 2 || color === undefined) {
+    return undefined
+  }
+
+  const lit = quarters.reduce((mask, one, i) => (one === color ? mask | (1 << i) : mask), 0)
+
+  return { ch: QUADRANTS[lit]!, color, bg: colors.find(one => one !== color) }
+}
+
 /**
  * One frame of the stage, `STAGE_ROWS` rows of same-colored runs, `width` cells
  * each. `t` is her frame counter and `since` the frames her mood has lasted.
@@ -826,7 +881,10 @@ export const frameRows = (name: SceneName, t: number, width: number, since = t):
       const above = c.px[row * 2]?.[from]
       const below = c.px[row * 2 + 1]?.[from]
       const isBare = above === undefined && below === undefined
-      const cell = glyph && (glyph.bg !== undefined || isBare) ? glyph : cellOf(above, below)
+      const top = c.halves[row * 2]?.[from]
+      const bottom = c.halves[row * 2 + 1]?.[from]
+      const quarters = top || bottom ? quartersOf([...(top ?? [above, above]), ...(bottom ?? [below, below])]) : undefined
+      const cell = glyph && (glyph.bg !== undefined || isBare) ? glyph : (quarters ?? cellOf(above, below))
       // A blank cell carries no color, so blanks run together.
       const color = cell.ch === ' ' ? undefined : cell.color
       const last = runs[runs.length - 1]
