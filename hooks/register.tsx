@@ -5,7 +5,7 @@ import type { Mood } from '../types'
 import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
 import { advance, close, CLOSED, GAME_TICK_MS, LANE_WIDTH, LANES, start, steer, trackOf } from './game'
 import type { Cell } from './game'
-import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, nextSkyAt, REST_EVERY, REST_FRAME, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
@@ -13,6 +13,8 @@ const COLUMNS = 22
 const ROWS = 12
 // Cells kept free between the rabbit's stage and the pane's right edge.
 const SHIFT_LEFT = 3
+// Asleep she breathes slowly: her frame moves on one clock period in this many.
+const SLEEP_EVERY = 8
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
@@ -33,37 +35,23 @@ let seed = 0
 
 // The game's clock, running only while a run is on.
 let ticker: Timer | undefined
-// Her frame clock, running only while she is awake: asleep, nothing redraws
-// but the turn of the sky in her window.
+// Her frame clock, and the periods it has counted.
 let frames: Timer | undefined
-let skyTurn: Timer | undefined
+let period = 0
 
 const wake = ($: EngineInterface) => {
-  skyTurn?.cancel()
-  skyTurn = undefined
   frames ??= $.clock.every(FRAME_MS, () => void frame($))
 }
 
 const frame = async ($: EngineInterface) => {
+  period += 1
+
+  if ((await read($, pet)).mood === 'sleepy' && period % SLEEP_EVERY !== 0) {
+    return
+  }
+
   const now = await $.clock.now()
   await update($, pet, one => step(one, now))
-
-  if ((await read($, pet)).mood === 'sleepy') {
-    await rest($)
-  }
-}
-
-// Stops her clock on her resting frame, and waits for the sky to turn.
-const rest = async ($: EngineInterface) => {
-  frames?.cancel()
-  frames = undefined
-  await update($, pet, one => ({ ...one, tick: one.tick + ((((REST_FRAME - one.tick) % REST_EVERY) + REST_EVERY) % REST_EVERY) }))
-  const now = await $.clock.now()
-  skyTurn?.cancel()
-  skyTurn = $.clock.after(nextSkyAt(now) - now, () => {
-    // A whole round of frames on: the same pose, drawn again under the new sky.
-    void update($, pet, one => ({ ...one, tick: one.tick + REST_EVERY })).then(() => rest($))
-  })
 }
 
 const halt = () => {
@@ -105,7 +93,6 @@ export const register: Register = on => {
     seed = Math.floor(await $.clock.now()) % 997
     // A reload starts the module over, its timers gone with it.
     frames = undefined
-    skyTurn = undefined
     wake($)
 
     return next(e)

@@ -61,6 +61,7 @@ const INKS: Record<string, string> = {
   a: '#3565c0', // ribbon and shoes
   C: '#c8ecff', // a tear
   D: '#ffffff', // diamond earrings
+  d: '#ffffff', // a second star
   V: '#a8dcf5', // gloves
   H: '#ff4d6d', // heart
   U: LAPTOP_COLOR,
@@ -397,7 +398,7 @@ const SKIES: Record<Sky, { blank: string; rows: readonly string[] }> = {
   // A slim crescent, and two stars that twinkle.
   night: {
     blank: 'X',
-    rows: ['..........DD..', '....YYYY......', '...YYY........', '..YYY......D..', '..YYY.........', '...YYY........', '....YYYY......'],
+    rows: ['..............', '....YYYY....D.', '...YYY........', '..YYY.........', '..YYY.....d...', '...YYY........', '....YYYY......'],
   },
 }
 
@@ -427,31 +428,13 @@ export const skyAt = (ms: number): Sky => {
   return hour < DAWN || hour >= NIGHTFALL ? 'night' : hour >= DUSK_HOUR ? 'dusk' : 'day'
 }
 
-/** When, after `ms`, her sky next turns. */
-export const nextSkyAt = (ms: number): number => {
-  for (const days of [0, 1]) {
-    for (const hour of [DAWN, DUSK_HOUR, NIGHTFALL]) {
-      const at = new Date(ms)
-      at.setDate(at.getDate() + days)
-      at.setHours(hour, 0, 0, 0)
-
-      if (at.getTime() > ms) {
-        return at.getTime()
-      }
-    }
-  }
-
-  return ms
-}
-
-// Asleep she holds still on one frame: all three of her Zzz up, her star lit.
-export const REST_EVERY = 24
-export const REST_FRAME = 3
+// A star's colors as it twinkles: bright, warm, cool, dim.
+const TWINKLE = ['#ffffff', '#fff1a8', '#b8d8ff', '#56648a']
 
 const view = (c: Canvas, x: number, t: number, sky: Sky) => {
   const { blank, rows } = SKIES[sky]
   paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', blank)))
-  fine(c, x + 1, 1, rows, blank, sky === 'night' && t % 8 >= 4 ? { ...INKS, D: '#56648a' } : INKS)
+  fine(c, x + 1, 1, rows, blank, sky === 'night' ? { ...INKS, D: pick(TWINKLE, t), d: pick(TWINKLE, t + 2) } : INKS)
 }
 
 const CARROT = ['.g.', 'GgG', 'OOO', 'OOO', 'oOo', '.O.', '.o.']
