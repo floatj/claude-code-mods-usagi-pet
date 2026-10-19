@@ -384,12 +384,38 @@ const DUSK = ['ZZZZZ', 'ZZZZZ', 'ZZrZZ', 'zrrrz', 'rrrrr']
 
 export type Sky = 'day' | 'dusk' | 'night'
 
-/** The sky where she is at `ms` on the clock: day from six, dusk from five in the afternoon, night from seven. */
+// The hours her sky turns: day at six, dusk at five in the afternoon, night at seven.
+const DAWN = 6
+const DUSK_HOUR = 17
+const NIGHTFALL = 19
+
+/** The sky where she is at `ms` on the clock. */
 export const skyAt = (ms: number): Sky => {
   const hour = new Date(ms).getHours()
 
-  return hour < 6 || hour >= 19 ? 'night' : hour >= 17 ? 'dusk' : 'day'
+  return hour < DAWN || hour >= NIGHTFALL ? 'night' : hour >= DUSK_HOUR ? 'dusk' : 'day'
 }
+
+/** When, after `ms`, her sky next turns. */
+export const nextSkyAt = (ms: number): number => {
+  for (const days of [0, 1]) {
+    for (const hour of [DAWN, DUSK_HOUR, NIGHTFALL]) {
+      const at = new Date(ms)
+      at.setDate(at.getDate() + days)
+      at.setHours(hour, 0, 0, 0)
+
+      if (at.getTime() > ms) {
+        return at.getTime()
+      }
+    }
+  }
+
+  return ms
+}
+
+// Asleep she holds still on one frame: all three of her Zzz up, her star lit.
+export const REST_EVERY = 24
+export const REST_FRAME = 3
 
 const view = (c: Canvas, x: number, t: number, sky: Sky) => {
   paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', 'X')))

@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { advance, CLOSED, start, steer, TRACK_ROWS } from './game'
 import { INITIAL, setMood, SLEEP_AFTER_MS, step } from './bunny'
-import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, nextSkyAt, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = {
   component: 'Pane',
@@ -59,6 +59,9 @@ test('her window shows the sun by day, a sunset at dusk and the moon at night', 
   expect([at(5, 59), at(6), at(16, 59), at(17), at(18, 59), at(19), at(3)]).toEqual(['night', 'day', 'day', 'dusk', 'dusk', 'night', 'night'])
   const drawn = (['day', 'dusk', 'night'] as const).map(sky => JSON.stringify(frameRows('sleep', 0, MAX_STAGE, 0, sky)))
   expect(new Set(drawn).size).toBe(3)
+  const evening = new Date(2026, 9, 19, 16, 30).getTime()
+  expect(nextSkyAt(evening)).toBe(new Date(2026, 9, 19, 17).getTime())
+  expect(nextSkyAt(new Date(2026, 9, 19, 19).getTime())).toBe(new Date(2026, 9, 20, 6).getTime())
 })
 
 test('the scene follows her mood, the running tool, the spinner word and a long turn', () => {
@@ -102,7 +105,7 @@ test('the pane draws the bunny and petting it shows love', async ($, on) => {
   }
 })
 
-test('the session clock moves her: slowly asleep, a frame a period once a prompt wakes her', async ($, on) => {
+test('asleep she holds still but for the sky in her window; a prompt wakes her clock', async ($, on) => {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -124,13 +127,16 @@ test('the session clock moves her: slowly asleep, a frame a period once a prompt
 
   await clock.advance(FRAME_MS)
   expect(await ui.find({ type: 'Text', text: /睡著了/ })).toBeDefined()
-  const asleep = await framesOver(16)
-  expect(asleep).toBeGreaterThan(1)
-  expect(asleep).toBeLessThan(6)
+  expect(await framesOver(16)).toBe(1)
+
+  const before = await drawn()
+  await clock.advance(nextSkyAt(clock.now()) - clock.now())
+  expect(await drawn()).not.toBe(before)
+  expect(await framesOver(16)).toBe(1)
 
   await $.prompt.submit({ text: 'hi' } as never)
   expect(await ui.find({ type: 'Text', text: /收到！/ })).toBeDefined()
-  expect(await framesOver(16)).toBeGreaterThan(asleep)
+  expect(await framesOver(16)).toBeGreaterThan(1)
 })
 
 test('the runner scores rows and coins, and a train ends the run', () => {

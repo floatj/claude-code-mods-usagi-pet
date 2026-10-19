@@ -5,7 +5,7 @@ import type { Mood } from '../types'
 import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
 import { advance, close, CLOSED, GAME_TICK_MS, LANE_WIDTH, LANES, start, steer, trackOf } from './game'
 import type { Cell } from './game'
-import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, nextSkyAt, REST_EVERY, REST_FRAME, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
@@ -13,8 +13,6 @@ const COLUMNS = 22
 const ROWS = 12
 // Cells kept free between the rabbit's stage and the pane's right edge.
 const SHIFT_LEFT = 3
-// Asleep she breathes slowly: her frame moves on one clock period in this many.
-const SLEEP_EVERY = 4
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
@@ -35,6 +33,38 @@ let seed = 0
 
 // The game's clock, running only while a run is on.
 let ticker: Timer | undefined
+// Her frame clock, running only while she is awake: asleep, nothing redraws
+// but the turn of the sky in her window.
+let frames: Timer | undefined
+let skyTurn: Timer | undefined
+
+const wake = ($: EngineInterface) => {
+  skyTurn?.cancel()
+  skyTurn = undefined
+  frames ??= $.clock.every(FRAME_MS, () => void frame($))
+}
+
+const frame = async ($: EngineInterface) => {
+  const now = await $.clock.now()
+  await update($, pet, one => step(one, now))
+
+  if ((await read($, pet)).mood === 'sleepy') {
+    await rest($)
+  }
+}
+
+// Stops her clock on her resting frame, and waits for the sky to turn.
+const rest = async ($: EngineInterface) => {
+  frames?.cancel()
+  frames = undefined
+  await update($, pet, one => ({ ...one, tick: one.tick + ((((REST_FRAME - one.tick) % REST_EVERY) + REST_EVERY) % REST_EVERY) }))
+  const now = await $.clock.now()
+  skyTurn?.cancel()
+  skyTurn = $.clock.after(nextSkyAt(now) - now, () => {
+    // A whole round of frames on: the same pose, drawn again under the new sky.
+    void update($, pet, one => ({ ...one, tick: one.tick + REST_EVERY })).then(() => rest($))
+  })
+}
 
 const halt = () => {
   ticker?.cancel()
@@ -73,18 +103,10 @@ export const register: Register = on => {
     // A reload drops the game's clock, so a run left open would stand still.
     await update($, game, close)
     seed = Math.floor(await $.clock.now()) % 997
-    let period = 0
-    $.clock.every(FRAME_MS, () => {
-      period += 1
-      void read($, pet).then(async b => {
-        if (b.mood === 'sleepy' && period % SLEEP_EVERY !== 0) {
-          return
-        }
-
-        const now = await $.clock.now()
-        await update($, pet, one => step(one, now))
-      })
-    })
+    // A reload starts the module over, its timers gone with it.
+    frames = undefined
+    skyTurn = undefined
+    wake($)
 
     return next(e)
   })
@@ -98,6 +120,7 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const now = await $.clock.now()
     await update($, pet, b => ({ ...setMood(b, 'shock', now), isBusy: true, turnTick: b.tick }))
+    wake($)
 
     return next(e)
   })
@@ -106,6 +129,7 @@ export const register: Register = on => {
     running += 1
     const startedAt = await $.clock.now()
     await update($, pet, b => setMood(b, 'working', startedAt, e.tool))
+    wake($)
 
     try {
       const ran = await next(e)
@@ -129,6 +153,7 @@ export const register: Register = on => {
       ...setMood(b, b.mood === 'sad' ? 'sad' : 'happy', now),
       isBusy: false,
     }))
+    wake($)
 
     return next(e)
   })
@@ -231,6 +256,7 @@ export const register: Register = on => {
                 ...setMood(one, 'love', now),
                 pets: one.pets + 1,
               }))
+              wake($)
             }}
           />
           <Button key="game" label="跑酷" hotkey="g" onPress={() => play($)} />
