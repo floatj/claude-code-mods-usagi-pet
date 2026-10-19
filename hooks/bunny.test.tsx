@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { advance, CLOSED, start, steer, TRACK_ROWS } from './game'
 import { INITIAL, setMood, SLEEP_AFTER_MS, step } from './bunny'
-import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, STAGE_ROWS } from './scenes'
+import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = {
   component: 'Pane',
@@ -52,6 +52,13 @@ test('she is painted in more colors than her own, and moves from frame to frame'
     const frames = new Set(Array.from({ length: 60 }, (_, t) => JSON.stringify(frameRows(name, t, 22))))
     expect(frames.size).toBeGreaterThan(1)
   }
+})
+
+test('her window shows the sun by day, a sunset at dusk and the moon at night', () => {
+  const at = (hour: number, minute = 0) => skyAt(new Date(2026, 9, 19, hour, minute).getTime())
+  expect([at(5, 59), at(6), at(16, 59), at(17), at(18, 59), at(19), at(3)]).toEqual(['night', 'day', 'day', 'dusk', 'dusk', 'night', 'night'])
+  const drawn = (['day', 'dusk', 'night'] as const).map(sky => JSON.stringify(frameRows('sleep', 0, MAX_STAGE, 0, sky)))
+  expect(new Set(drawn).size).toBe(3)
 })
 
 test('the scene follows her mood, the running tool, the spinner word and a long turn', () => {

@@ -51,6 +51,11 @@ const INKS: Record<string, string> = {
   K: '#2a2530', // eye
   k: '#4f8ff7', // iris
   X: '#1b2a48', // the night sky
+  J: '#8fd3ff', // the sky by day
+  e: '#cfe0ef', // under a cloud
+  Z: '#ff8c5a', // the sky at dusk
+  z: '#ffc070', // low over the horizon at dusk
+  r: '#ff5a3c', // the setting sun
   A: '#5b9bf0', // dress
   a: '#3565c0', // ribbon and shoes
   C: '#c8ecff', // a tear
@@ -221,7 +226,7 @@ type Pose = {
 type Stroll = { dx: number; isMoving: boolean; lift: number; isSquashed: boolean; dir: 1 | -1 }
 const STILL: Stroll = { dx: 0, isMoving: false, lift: 0, isSquashed: false, dir: 1 }
 
-type Shot = { c: Canvas; t: number; since: number; width: number; isRoomy: boolean; stroll: Stroll }
+type Shot = { c: Canvas; t: number; since: number; width: number; isRoomy: boolean; sky: Sky; stroll: Stroll }
 
 // The face a scene leaves alone: a look around, a blink or two; on the move
 // she looks where she is going.
@@ -372,11 +377,41 @@ const laptop = ({ c, isRoomy }: Shot, [top, bottom]: readonly [string, string], 
   paint(c, x, 13, ['QQQQQQQQQ', 'NNNNNNNNN', '.n.....n.'])
 }
 
-// Her window at night.
-const NIGHT = ['FFFFFFF', 'FXXXXXF', 'FXXXXXF', 'FXXXXXF', 'FXXXXXF', 'FXXXXXF', 'FFFFFFF']
+// Her window, its sky painted in: by day a sun and a cloud, at dusk the sun going down.
+const WINDOW = ['FFFFFFF', 'F.....F', 'F.....F', 'F.....F', 'F.....F', 'F.....F', 'FFFFFFF']
+const DAY = ['.YY..', 'YYYY.', 'YYYY.', '.YY.D', '...De']
+const DUSK = ['ZZZZZ', 'ZZZZZ', 'ZZrZZ', 'zrrrz', 'rrrrr']
 
-const night = (c: Canvas, x: number, t: number) => {
-  paint(c, x, 0, NIGHT)
+export type Sky = 'day' | 'dusk' | 'night'
+
+/** The sky where she is at `ms` on the clock: day from six, dusk from five in the afternoon, night from seven. */
+export const skyAt = (ms: number): Sky => {
+  const hour = new Date(ms).getHours()
+
+  return hour < 6 || hour >= 19 ? 'night' : hour >= 17 ? 'dusk' : 'day'
+}
+
+const view = (c: Canvas, x: number, t: number, sky: Sky) => {
+  paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', 'X')))
+
+  if (sky === 'day') {
+    paint(c, x + 1, 1, DAY.map(row => row.replaceAll('.', 'J')))
+    // The cloud's left edge, half a pixel in.
+    split(c, x + 4, 4, INKS.J!, INKS.D!)
+
+    return
+  }
+
+  if (sky === 'dusk') {
+    paint(c, x + 1, 1, DUSK)
+    // Rounded half a pixel at a time, its crown and then its shoulders.
+    split(c, x + 2, 3, INKS.Z!, INKS.r!)
+    split(c, x + 4, 3, INKS.r!, INKS.Z!)
+    split(c, x + 1, 4, INKS.z!, INKS.r!)
+    split(c, x + 5, 4, INKS.r!, INKS.z!)
+
+    return
+  }
 
   // A slim crescent in half pixels, two rows to a cell so each cell holds moon and sky.
   for (const y of [2, 5]) {
@@ -423,14 +458,14 @@ const SCENES = {
       // The clock runs slow while she sleeps: one breath every few seconds.
       // Sat down, her head nodding with it. Her window is on her left where the
       // stage has room for it, else up over her table.
-      const pane = NIGHT[0]!.length + 1
+      const pane = WINDOW[0]!.length + 1
       const hasRoom = s.width >= ROOMY + pane
       const x = hasRoom ? Math.floor((s.width - ROOMY - pane) / 2) + pane : Math.floor((s.width - (s.isRoomy ? ROOMY : SPRITE)) / 2)
       rabbit(s, { x, ears: 'out', eyes: 'closed', isSquashed: true, nod: s.t % 4 < 2 ? 1 : 0, lift: 0 })
       laptop(s, RESTING, LAPTOP_COLOR, true, x + PROP_X)
 
       if (s.isRoomy) {
-        night(s.c, hasRoom ? x - pane : x + PROP_X + 2, s.t)
+        view(s.c, hasRoom ? x - pane : x + PROP_X + 2, s.t, s.sky)
       }
 
       const z = s.t % 6
@@ -901,16 +936,17 @@ const quartersOf = (quarters: readonly (string | undefined)[]): Glyph | undefine
 
 /**
  * One frame of the stage, `STAGE_ROWS` rows of same-colored runs, `width` cells
- * each. `t` is her frame counter and `since` the frames her mood has lasted.
+ * each. `t` is her frame counter, `since` the frames her mood has lasted, and
+ * `sky` what her window shows.
  */
-export const frameRows = (name: SceneName, t: number, width: number, since = t): Run[][] => {
+export const frameRows = (name: SceneName, t: number, width: number, since = t, sky: Sky = 'night'): Run[][] => {
   const columns = Math.max(1, Math.min(Math.floor(width), MAX_STAGE))
   const scene: Scene = SCENES[name]
   const isRoomy = columns >= ROOMY
   const extent = scene.strolls === undefined ? undefined : isRoomy ? scene.strolls : SPRITE
   const stroll = extent === undefined ? STILL : strollAt(t, columns - extent)
   const c = canvasOf(columns)
-  scene.draw({ c, t, since, width: columns, isRoomy, stroll })
+  scene.draw({ c, t, since, width: columns, isRoomy, sky, stroll })
   // A scene that neither strolls nor fills the stage sits in the middle of it.
   const centered = Math.floor((columns - (isRoomy ? ROOMY : SPRITE)) / 2)
   const dx = scene.isWide ? 0 : extent === undefined ? centered : stroll.dx

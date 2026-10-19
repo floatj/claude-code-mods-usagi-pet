@@ -5,7 +5,7 @@ import type { Mood } from '../types'
 import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
 import { advance, close, CLOSED, GAME_TICK_MS, LANE_WIDTH, LANES, start, steer, trackOf } from './game'
 import type { Cell } from './game'
-import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, sceneOf, STAGE_ROWS } from './scenes'
+import { FUR_COLOR, FRAME_MS, frameRows, MAX_STAGE, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
@@ -192,7 +192,7 @@ export const register: Register = on => {
     // A rabbit kept from before a reload may lack what was added since.
     const b = { ...INITIAL, ...(await read($, pet)) }
     const width = Math.max(1, Math.min(bodyColumns, MAX_STAGE))
-    const stage = frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick)
+    const stage = frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick, skyAt(await $.clock.now()))
     const color = COLOR[b.mood]
 
     return (
