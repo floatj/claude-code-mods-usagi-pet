@@ -8,7 +8,7 @@ import type { Bunny } from '../types'
 // Pure functions only, so the frames can be checked without the engine.
 
 export const STAGE_ROWS = 9
-export const MAX_STAGE = 26
+export const MAX_STAGE = 28
 export const FRAME_MS = 150
 // Each act of a long turn runs a quarter of a minute.
 export const ACT_FRAMES = Math.round(15_000 / FRAME_MS)
@@ -50,7 +50,7 @@ const INKS: Record<string, string> = {
   B: '#ff9fb2', // blush
   K: '#2a2530', // eye
   k: '#4f8ff7', // iris
-  E: '#7a5a50', // a closed eye
+  X: '#1b2a48', // the night sky
   A: '#5b9bf0', // dress
   a: '#3565c0', // ribbon and shoes
   C: '#c8ecff', // a tear
@@ -259,7 +259,12 @@ const eyes = (c: Canvas, x: number, y: number, look: Eyes) => {
 
   for (const at of [x + 3 + shift, x + 7 + shift]) {
     if (look === 'closed') {
-      dot(c, at, y + 1, INKS.E!)
+      // A line along the foot of her eye's cell, all skin whichever way the cells fall.
+      const line = c.glyphs[Math.floor(y / 2) + SKY]
+
+      if (line && at >= 0 && at < c.width) {
+        line[at] = { ch: '▂', color: INKS.K!, bg: INKS.S!, isWorn: true }
+      }
     } else if (look === 'happy') {
       dot(c, at, y, INKS.K!)
     } else if (look === 'heart') {
@@ -351,20 +356,41 @@ const SCREENS: readonly (readonly [string, string])[] = [
 const RESTING = ['     ', '(·ω·)'] as const
 
 /** Her laptop on a low table, a column clear of her; shut, just its lid on the keyboard. */
-const laptop = ({ c, isRoomy }: Shot, [top, bottom]: readonly [string, string], ink = GREEN, isShut = false) => {
+const laptop = ({ c, isRoomy }: Shot, [top, bottom]: readonly [string, string], ink = GREEN, isShut = false, x = PROP_X) => {
   if (!isRoomy) {
     return
   }
 
   if (isShut) {
-    paint(c, PROP_X + 1, 12, ['uuuuuuu'])
+    paint(c, x + 1, 12, ['uuuuuuu'])
   } else {
-    paint(c, PROP_X + 1, 7, ['UUUUUUU', 'U.....U', 'U.....U', 'U.....U', 'U.....U', 'uuuuuuu'])
-    write(c, PROP_X + 2, 4, top.padEnd(5), ink, SCREEN)
-    write(c, PROP_X + 2, 5, bottom.padEnd(5), ink, SCREEN)
+    paint(c, x + 1, 7, ['UUUUUUU', 'U.....U', 'U.....U', 'U.....U', 'U.....U', 'uuuuuuu'])
+    write(c, x + 2, 4, top.padEnd(5), ink, SCREEN)
+    write(c, x + 2, 5, bottom.padEnd(5), ink, SCREEN)
   }
 
-  paint(c, PROP_X, 13, ['QQQQQQQQQ', 'NNNNNNNNN', '.n.....n.'])
+  paint(c, x, 13, ['QQQQQQQQQ', 'NNNNNNNNN', '.n.....n.'])
+}
+
+// Her window at night.
+const NIGHT = ['FFFFFFF', 'FXXXXXF', 'FXXXXXF', 'FXXXXXF', 'FXXXXXF', 'FXXXXXF', 'FFFFFFF']
+
+const night = (c: Canvas, x: number, t: number) => {
+  paint(c, x, 0, NIGHT)
+
+  // A slim crescent in half pixels, two rows to a cell so each cell holds moon and sky.
+  for (const y of [2, 5]) {
+    dot(c, x + 3, y, INKS.Y!)
+    split(c, x + 4, y, INKS.Y!, INKS.X!)
+  }
+
+  for (const y of [3, 4]) {
+    split(c, x + 2, y, INKS.X!, INKS.Y!)
+    split(c, x + 3, y, INKS.Y!, INKS.X!)
+  }
+
+  // And a star that twinkles.
+  dot(c, x + 5, 1, t % 8 < 4 ? '#ffffff' : '#56648a')
 }
 
 const CARROT = ['.g.', 'GgG', 'OOO', 'OOO', 'oOo', '.O.', '.o.']
@@ -392,15 +418,25 @@ const HOP = [0, 1, 2, 1] as const
 
 const SCENES = {
   sleep: {
+    isWide: true,
     draw: s => {
       // The clock runs slow while she sleeps: one breath every few seconds.
-      // Sat down, her head nodding with it.
-      rabbit(s, { ears: 'out', eyes: 'closed', isSquashed: true, nod: s.t % 4 < 2 ? 1 : 0, lift: 0 })
-      laptop(s, RESTING, LAPTOP_COLOR, true)
+      // Sat down, her head nodding with it. Her window is on her left where the
+      // stage has room for it, else up over her table.
+      const pane = NIGHT[0]!.length + 1
+      const hasRoom = s.width >= ROOMY + pane
+      const x = hasRoom ? Math.floor((s.width - ROOMY - pane) / 2) + pane : Math.floor((s.width - (s.isRoomy ? ROOMY : SPRITE)) / 2)
+      rabbit(s, { x, ears: 'out', eyes: 'closed', isSquashed: true, nod: s.t % 4 < 2 ? 1 : 0, lift: 0 })
+      laptop(s, RESTING, LAPTOP_COLOR, true, x + PROP_X)
+
+      if (s.isRoomy) {
+        night(s.c, hasRoom ? x - pane : x + PROP_X + 2, s.t)
+      }
+
       const z = s.t % 6
-      write(s.c, 11, 1, z >= 1 ? 'z' : ' ', GRAY)
-      write(s.c, 12, 0, z >= 2 ? 'Z' : ' ', GRAY)
-      write(s.c, 14, -1, z >= 3 ? 'Z' : ' ', GRAY)
+      write(s.c, x + 11, 1, z >= 1 ? 'z' : ' ', GRAY)
+      write(s.c, x + 12, 0, z >= 2 ? 'Z' : ' ', GRAY)
+      write(s.c, x + 14, -1, z >= 3 ? 'Z' : ' ', GRAY)
     },
   },
 
