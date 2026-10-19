@@ -8,7 +8,7 @@ import type { Bunny } from '../types'
 // Pure functions only, so the frames can be checked without the engine.
 
 export const STAGE_ROWS = 9
-export const MAX_STAGE = 28
+export const MAX_STAGE = 30
 export const FRAME_MS = 150
 // Each act of a long turn runs a quarter of a minute.
 export const ACT_FRAMES = Math.round(15_000 / FRAME_MS)
@@ -53,9 +53,10 @@ const INKS: Record<string, string> = {
   X: '#1b2a48', // the night sky
   J: '#8fd3ff', // the sky by day
   e: '#cfe0ef', // under a cloud
-  Z: '#ff8c5a', // the sky at dusk
-  z: '#ffc070', // low over the horizon at dusk
-  r: '#ff5a3c', // the setting sun
+  M: '#a8558a', // high in the sky at dusk
+  Z: '#ff7a59', // the sky at dusk
+  z: '#ffb070', // low over the horizon at dusk, and the sun on the sea
+  m: '#4a3466', // the sea at dusk
   A: '#5b9bf0', // dress
   a: '#3565c0', // ribbon and shoes
   C: '#c8ecff', // a tear
@@ -377,12 +378,42 @@ const laptop = ({ c, isRoomy }: Shot, [top, bottom]: readonly [string, string], 
   paint(c, x, 13, ['QQQQQQQQQ', 'NNNNNNNNN', '.n.....n.'])
 }
 
-// Her window, its sky painted in: by day a sun and a cloud, at dusk the sun going down.
-const WINDOW = ['FFFFFFF', 'F.....F', 'F.....F', 'F.....F', 'F.....F', 'F.....F', 'FFFFFFF']
-const DAY = ['.YY..', 'YYYY.', 'YYYY.', '.YY.D', '...De']
-const DUSK = ['ZZZZZ', 'ZZZZZ', 'ZZrZZ', 'zrrrz', 'rrrrr']
-
 export type Sky = 'day' | 'dusk' | 'night'
+
+// Her window. Its skies are drawn in half pixels, two letters to a pixel, a dot
+// the sky's own color; each cell of them holds no more than two colors.
+const WINDOW = ['FFFFFFFFF', ...Array.from({ length: 7 }, () => 'F.......F'), 'FFFFFFFFF']
+const SKIES: Record<Sky, { blank: string; rows: readonly string[] }> = {
+  // A sun, and a cloud going by under it.
+  day: {
+    blank: 'J',
+    rows: ['......YYYY....', '.....YYYYYY...', '.....YYYYYY...', '......YYYY....', '..DDDD........', '.DDDDDDDD.....', '..eeeeee......'],
+  },
+  // The sun going down into the sea, its light on the water.
+  dusk: {
+    blank: 'Z',
+    rows: ['MMMMMMMMMMMMMM', 'ZZZZZZZZZZZZZZ', 'ZZZZZYYYYZZZZZ', 'zzzYYYYYYYYzzz', 'zzYYYYYYYYYYzz', 'mmmzzzzzzzzmmm', 'mmmmmzzzzmmmmm'],
+  },
+  // A slim crescent, and two stars that twinkle.
+  night: {
+    blank: 'X',
+    rows: ['..........DD..', '....YYYY......', '...YYY........', '..YYY......D..', '..YYY.........', '...YYY........', '....YYYY......'],
+  },
+}
+
+/** Paints half-pixel `rows` from (x, y): each pair of letters one pixel, split where they differ. */
+const fine = (c: Canvas, x: number, y: number, rows: readonly string[], blank: string, inks = INKS) => {
+  rows.forEach((row, dy) => {
+    for (let dx = 0; dx * 2 < row.length; dx += 1) {
+      const [left, right] = [row[dx * 2], row[dx * 2 + 1]].map(one => inks[one === '.' ? blank : one!]!)
+      dot(c, x + dx, y + dy, left!)
+
+      if (left !== right) {
+        split(c, x + dx, y + dy, left!, right!)
+      }
+    }
+  })
+}
 
 // The hours her sky turns: day at six, dusk at five in the afternoon, night at seven.
 const DAWN = 6
@@ -418,40 +449,9 @@ export const REST_EVERY = 24
 export const REST_FRAME = 3
 
 const view = (c: Canvas, x: number, t: number, sky: Sky) => {
-  paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', 'X')))
-
-  if (sky === 'day') {
-    paint(c, x + 1, 1, DAY.map(row => row.replaceAll('.', 'J')))
-    // The cloud's left edge, half a pixel in.
-    split(c, x + 4, 4, INKS.J!, INKS.D!)
-
-    return
-  }
-
-  if (sky === 'dusk') {
-    paint(c, x + 1, 1, DUSK)
-    // Rounded half a pixel at a time, its crown and then its shoulders.
-    split(c, x + 2, 3, INKS.Z!, INKS.r!)
-    split(c, x + 4, 3, INKS.r!, INKS.Z!)
-    split(c, x + 1, 4, INKS.z!, INKS.r!)
-    split(c, x + 5, 4, INKS.r!, INKS.z!)
-
-    return
-  }
-
-  // A slim crescent in half pixels, two rows to a cell so each cell holds moon and sky.
-  for (const y of [2, 5]) {
-    dot(c, x + 3, y, INKS.Y!)
-    split(c, x + 4, y, INKS.Y!, INKS.X!)
-  }
-
-  for (const y of [3, 4]) {
-    split(c, x + 2, y, INKS.X!, INKS.Y!)
-    split(c, x + 3, y, INKS.Y!, INKS.X!)
-  }
-
-  // And a star that twinkles.
-  dot(c, x + 5, 1, t % 8 < 4 ? '#ffffff' : '#56648a')
+  const { blank, rows } = SKIES[sky]
+  paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', blank)))
+  fine(c, x + 1, 1, rows, blank, sky === 'night' && t % 8 >= 4 ? { ...INKS, D: '#56648a' } : INKS)
 }
 
 const CARROT = ['.g.', 'GgG', 'OOO', 'OOO', 'oOo', '.O.', '.o.']
@@ -486,11 +486,14 @@ const SCENES = {
       // stage has room for it, else up over her table.
       const pane = WINDOW[0]!.length + 1
       const hasRoom = s.width >= ROOMY + pane
-      const x = hasRoom ? Math.floor((s.width - ROOMY - pane) / 2) + pane : Math.floor((s.width - (s.isRoomy ? ROOMY : SPRITE)) / 2)
+      const centered = Math.floor((s.width - (s.isRoomy ? ROOMY : SPRITE)) / 2)
+      // Over her table the window takes from a column past its edge; she moves over for it.
+      const overTable = s.width - PROP_X - pane - 1
+      const x = hasRoom ? Math.floor((s.width - ROOMY - pane) / 2) + pane : s.isRoomy ? Math.max(0, Math.min(centered, overTable)) : centered
       rabbit(s, { x, ears: 'out', eyes: 'closed', isSquashed: true, nod: s.t % 4 < 2 ? 1 : 0, lift: 0 })
       laptop(s, RESTING, LAPTOP_COLOR, true, x + PROP_X)
 
-      if (s.isRoomy) {
+      if (hasRoom || (s.isRoomy && x <= overTable)) {
         view(s.c, hasRoom ? x - pane : x + PROP_X + 2, s.t, s.sky)
       }
 
