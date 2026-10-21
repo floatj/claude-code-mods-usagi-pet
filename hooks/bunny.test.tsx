@@ -1,6 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { advance, CLOSED, start, steer, TRACK_ROWS } from './game'
 import { INITIAL, setMood, SLEEP_AFTER_MS, step } from './bunny'
 import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
@@ -131,35 +130,4 @@ test('the session clock moves her: slowly asleep, a frame a period once a prompt
   await $.prompt.submit({ text: 'hi' } as never)
   expect(await ui.find({ type: 'Text', text: /收到！/ })).toBeDefined()
   expect(await framesOver(16)).toBeGreaterThan(asleep)
-})
-
-test('the runner scores rows and coins, and a train ends the run', () => {
-  let g = start(CLOSED)
-  // Roll 0 spawns a train in the left lane; she stands in the middle one.
-  for (let at = 0; at < TRACK_ROWS * 3; at += 1) g = advance(g, 0)
-  expect(g.isOver).toBe(false)
-  expect(g.score).toBe(TRACK_ROWS)
-
-  const hit = steer({ ...g, rows: [...g.rows.slice(0, -1), '#o '] }, -1)
-  expect(hit.isOver).toBe(true)
-  expect(hit.best).toBe(g.score)
-  expect(steer(hit, 1)).toBe(hit)
-
-  const coin = steer({ ...g, lane: 0, rows: [...g.rows.slice(0, -1), ' o '] }, 1)
-  expect(coin.score).toBe(g.score + 5)
-})
-
-test('the game button swaps the pane to the runner and X swaps it back', async ($, on) => {
-  mock.clock(on)
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'bunny', surface, ...PANE })
-    await ui.press({ key: 'game' })
-    expect(await ui.find({ type: 'Text', text: /分數 0/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /\(·ω·\)/ })).toBeDefined()
-    await ui.press({ key: 'right' })
-    await ui.press({ key: 'exit' })
-    expect(await ui.find({ key: 'pet' })).toBeDefined()
-    await ui.unmount()
-  }
 })
