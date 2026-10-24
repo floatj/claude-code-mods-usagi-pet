@@ -15,6 +15,11 @@ const TTL: Partial<Record<Mood, number>> = {
   welcome: 3000,
   // As long as the longest boot screen; a shorter one holds its last pose.
   boot: 5100,
+  // Parodies, each as long as its scene.
+  ditto: 6600,
+  mimikyu: 8700,
+  ranranru: 4200,
+  aqua: 4800,
 }
 
 export const INITIAL: Bunny = {
@@ -62,6 +67,10 @@ export const COLOR: Record<Mood, string | undefined> = {
   blast: 'magenta',
   welcome: 'magenta',
   boot: 'magenta',
+  ditto: 'magenta',
+  mimikyu: 'magenta',
+  ranranru: 'yellow',
+  aqua: 'blue',
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -105,5 +114,13 @@ export const captionOf = (b: Bunny): string => {
       return '歡迎回來♡'
     case 'boot':
       return '兔兔 啟動！'
+    case 'ditto':
+      return '有兩個兔兔？'
+    case 'mimikyu':
+      return '咦…是誰？'
+    case 'ranranru':
+      return '藍藍路☆'
+    case 'aqua':
+      return '嗚哇——'
   }
 }

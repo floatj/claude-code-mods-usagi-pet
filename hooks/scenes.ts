@@ -654,7 +654,407 @@ const HAT_INKS = { ...INKS, K: '#6a5a9a', P: '#ff8fc8' }
 
 const hash = (n: number) => ((n * 2654435761) >>> 0) % 1000 / 1000
 
+// ---- Parodies ----
+
+const DITTO = { D: '#c39ae6', d: '#9a6fc4', K: '#2a2530' }
+const BLOB = ['....DDD....', '..DDDDDDD..', '.DDDDDDDDD.', '.DDKDDDKDD.', 'DDDDDDDDDDD', 'DDDKKKKKDDD', 'dDDDDDDDDDd']
+
+/** Moves pixels from one place to another, each on its own clock: 0 at `from`, 1 at `to`. */
+const morph = (c: Canvas, from: readonly { x: number; y: number }[], to: readonly { x: number; y: number; color: string }[], t: number, color: string) => {
+  to.forEach((one, i) => {
+    const start = from[i % from.length]!
+    const k = Math.min(1, Math.max(0, t * 1.4 - hash(i) * 0.4))
+    dot(c, Math.round(start.x + (one.x - start.x) * k), Math.round(start.y + (one.y - start.y) * k), k < 1 ? color : one.color)
+  })
+}
+
+const pointsOf = (x: number, y: number, rows: readonly string[], inks: Record<string, string>) =>
+  rows.flatMap((row, dy) => [...row].flatMap((k, dx) => (inks[k] ? [{ x: x + dx, y: y + dy, color: inks[k]! }] : [])))
+
+// Its usual disguise, a plush yellow electric mouse with a face drawn on by hand.
+const PIKA = [
+  '.K.....K...',
+  '.Y.....Y...',
+  '.YY...YY...',
+  '..YYYYY....',
+  '.YYYYYYY...',
+  '.YKYYYKY...',
+  '.RYYYYYR...',
+  '.YYKYKYY...',
+  '..YYYYY....',
+  '.yYYYYYy...',
+  '.yYYYYYYy..',
+  'yYYYYYYYY.K',
+  'yYYYYYYYYKK',
+  'yyYYYYYYy.K',
+  '.sssesesss.',
+  '.y.y.y.y.y.',
+]
+const PIKA_INKS = { Y: '#f2d24b', y: '#c4a53a', K: '#2a2530', R: '#e8604a', s: '#2a1f18', e: '#fff3b0' }
+// What it is under the cloth: a shadow with two bright eyes.
+const SHADOW = ['...sssss...', '..sssssss..', '.sssesesss.', '.sssssssss.', '..sssssss..', '.s.s.s.s.s.']
+const SHADOW_INKS = { s: '#1a1210', e: '#fff3b0' }
+
+// A hand-made disguise of her: cloth ears, one bent over, hair and dress in duller
+// cloth, a face stitched on, a ragged hem with a dark gap under it, and a tail.
+const MIMIC = [
+  '.F......F..',
+  '.FP....PF..',
+  '.FP...FP...',
+  '..F..FF....',
+  '..TTTTTTT..',
+  '.TTTTTTTTT.',
+  '.TSKSSSKST.',
+  '.TBSSSSSBT.',
+  '..TSKSKST..',
+  '.AAAFFFAA..',
+  '.AAAFFFAAA.',
+  'AAAAFFFAA.K',
+  'AAAAFFFAAKK',
+  'aAAAFFFAa.K',
+  '.sssesesss.',
+  '.a.a.a.a.a.',
+]
+const MIMIC_INKS = {
+  F: '#e6e1d6',
+  P: '#e6a0b0',
+  T: '#b8c2dc',
+  S: '#f3e2d2',
+  K: '#2a2530',
+  B: '#ef9aa8',
+  A: '#6f93d6',
+  a: '#4f6fb0',
+  s: '#1a1210',
+  e: '#fff3b0',
+}
+
+// Her costumes, as colors for her sprite.
+const MIKU = { ...INKS, T: '#39c5bb', t: '#1f8f88', A: '#3a3f4a', a: '#39c5bb', F: '#d8dce2', V: '#3a3f4a', k: '#39c5bb' }
+const AQUA = { ...INKS, T: '#8fd0ff', t: '#4a9ad8', A: '#3a7fd8', a: '#8fd0ff', V: '#ffffff' }
+const LEEK = WANDS[2]!
+
+// Her dressed as the clown, 15 wide and the stage's full 18 tall, in three poses.
+const CLOWN_W = 15
+const CLOWN_HEAD = [
+  '.....F...F.....',
+  '....FP...PF....',
+  '....FP...PF....',
+  '...RRRRRRRRR...',
+  '..RRRRRRRRRRR..',
+  '.RRRRRRRRRRRRR.',
+  '.RRWWWWWWWWWRR.',
+  '.RRWWKWWWKWWRR.',
+  '.RRWBWWWWWBWRR.',
+  '..RRWWWWWWWRR..',
+]
+const CLOWN_LEGS = ['....YYYYYYY....', '.....YY.YY.....', '.....RW.WR.....', '....RRR.RRR....']
+const CLOWN: Record<'cross' | 'open' | 'up', readonly string[]> = {
+  // Arms crossed on her chest, a glove on each shoulder.
+  cross: [...CLOWN_HEAD, '...ggYYYYYgg...', '....RWYYYWR....', '....YRWYWRY....', '....RWYYYWR....', ...CLOWN_LEGS],
+  // Hands open by her chin, palms up, forearms down to her sides.
+  open: [
+    ...CLOWN_HEAD.slice(0, 7),
+    'gRRWWKWWWKWWRRg',
+    'ggRWBWWWWWBWRgg',
+    '.RRRWWWWWWWRRR.',
+    '.W..YYYYYYY..W.',
+    '.R..YYYYYYY..R.',
+    '..WRYYYYYYYRW..',
+    '....YYYYYYY....',
+    ...CLOWN_LEGS,
+  ],
+  // Both arms thrust straight up, striped, the gloves up past her ears.
+  up: [
+    '.g...F...F...g.',
+    '.g..FP...PF..g.',
+    '.R..FP...PF..R.',
+    '.W.RRRRRRRRR.W.',
+    '.RRRRRRRRRRRRR.',
+    '.WRRRRRRRRRRRW.',
+    '.RRWWWWWWWWWRR.',
+    '.WRWWKWWWKWWRW.',
+    '.RRWBWWWWWBWRR.',
+    '.WRRWWWWWWWRRW.',
+    '.RYYYYYYYYYYYR.',
+    '....YYYYYYY....',
+    '....YYYYYYY....',
+    '....YYYYYYY....',
+    ...CLOWN_LEGS,
+  ],
+}
+const CLOWN_INKS = { F: '#f6f4ef', P: '#ff9db0', R: '#e8402e', W: '#ffffff', Y: '#ffd23f', g: '#ffe680', K: '#2a2530', B: '#ffb0b8' }
+
+// A visit: a visitor bounces in from the right, she starts, and she hops away
+// into the left corner to peek, leaving it the stage. CORNER is where she peeks
+// from, most of her off the stage.
+const ARRIVE = 10
+const STEP_ASIDE = 16
+const CORNER = -6
+
+/** Draws her through a visit: beside it, startled, stepping aside, then peeking from the corner. */
+const visited = (s: Shot, peek: { eyes?: Eyes; startle?: boolean; faint?: boolean } = {}) => {
+  const p = s.since
+  const left = Math.max(0, Math.floor((s.width - 2 * SPRITE - 1) / 2))
+
+  if (p < ARRIVE) {
+    const isStartled = p >= 6
+    rabbit(s, { x: left, lift: isStartled ? pick([1, 3, 2, 0], p - 6) : 0, isSquashed: false, eyes: isStartled ? 'wide' : 'open', ears: isStartled ? 'out' : 'right', arms: isStartled ? 'up' : 'down', feet: isStartled && p < 9 ? 'tuck' : 'sit' })
+    if (isStartled) write(s.c, left + 5, -1, '!', YELLOW)
+    return
+  }
+
+  if (p < STEP_ASIDE) {
+    const k = (p - ARRIVE + 1) / (STEP_ASIDE - ARRIVE)
+    rabbit(s, { x: Math.round(left + (CORNER - left) * k), lift: pick([1, 2, 1, 0], p), isSquashed: false, eyes: 'left', ears: 'left', feet: 'tuck' })
+    return
+  }
+
+  if (peek.faint) {
+    // Fainted where she stood, flat out.
+    rabbit(s, { x: CORNER, lift: 0, isSquashed: true, nod: 1, eyes: 'closed', ears: 'down' })
+    return
+  }
+
+  rabbit(s, { x: CORNER, lift: 0, isSquashed: false, eyes: peek.startle ? 'wide' : (peek.eyes ?? 'right'), ears: peek.startle ? 'out' : 'up' })
+  if (peek.startle) write(s.c, 0, -1, '!', YELLOW)
+}
+
+/** Where a visitor stands: coming in from the right until she starts, then in the middle once she is aside. */
+const visitorAt = (s: Shot) => {
+  const p = s.since
+  const left = Math.max(0, Math.floor((s.width - 2 * SPRITE - 1) / 2))
+  const beside = Math.min(s.width - SPRITE, left + SPRITE + 1)
+  const middle = Math.floor((s.width - SPRITE) / 2) + 2
+
+  if (p < ARRIVE) return Math.max(beside, s.width - Math.floor(p * 2.2))
+  if (p < STEP_ASIDE) return Math.round(beside + (middle - beside) * ((p - ARRIVE + 1) / (STEP_ASIDE - ARRIVE)))
+  return middle
+}
+
 const SCENES = {
+  // A shapeshifter comes to call: she starts and steps aside to the corner, it
+  // wobbles, takes her shape with its own dotted face still on, she starts again
+  // at the sight of herself, and it goes back to a blob and hops.
+  ditto: {
+    isWide: true,
+    draw: s => {
+      const { c } = s
+      const p = s.since
+      const x = visitorAt(s)
+      const q = p - STEP_ASIDE
+      visited(s, { startle: q >= 12 && q < 16 })
+
+      if (q < 6) {
+        const wide = p % 2 === 0
+        paint(c, x + (wide ? 0 : 1), 9 + (wide ? 1 : 0) + (q < 0 ? p % 2 : 0), wide ? BLOB.slice(1) : BLOB.map(row => row.slice(1, 10)), DITTO)
+        return
+      }
+
+      const blob = pointsOf(x, 9, BLOB, { ...DITTO })
+      const her = pixelsOf(s, { x, lift: 0, isSquashed: false, eyes: 'open' })
+
+      if (q < 12) {
+        morph(c, blob, her, (q - 5) / 6, DITTO.D)
+        return
+      }
+
+      if (q < 20) {
+        // Her shape, its face: two dots and a line of a smile.
+        rabbit(s, { x, lift: 0, isSquashed: false, eyes: 'closed', ears: 'up' })
+        const top = FLOOR - SPRITE_ROWS
+        paint(c, x + 2, top + 7, ['SSSSSSS', 'SSSSSSS', 'SSSSSSS'])
+        dot(c, x + 3, top + 7, DITTO.K)
+        dot(c, x + 7, top + 7, DITTO.K)
+        paint(c, x + 4, top + 9, ['KKK'], DITTO)
+        write(c, x + SPRITE, 1, q % 4 < 2 ? '?' : ' ', YELLOW)
+        return
+      }
+
+      if (q < 25) {
+        morph(c, her, blob, (q - 19) / 5, DITTO.D)
+        return
+      }
+
+      paint(c, x, 9 - pick([0, 1, 2, 1], q), BLOB, DITTO)
+    },
+  },
+
+  // A ghost in its usual disguise comes to call: she starts and steps aside to
+  // the corner. It looks her over, drops its disguise with a rustle, shadow and
+  // eyes, and pulls on a hand-made one of her. It nods hello; its head snaps off
+  // with a "poki" and hangs at its side; out of the neck peers a shadow with red
+  // eyes, and she faints flat out; a little dark hand puts the head back on; it
+  // tilts its head at her, and she comes round with a start.
+  mimikyu: {
+    isWide: true,
+    draw: s => {
+      const { c } = s
+      const p = s.since
+      const q = p - STEP_ASIDE
+      const x = visitorAt(s)
+
+      if (q < 12) {
+        visited(s, q >= 0 ? { eyes: 'right' } : {})
+
+        if (q < 4) {
+          paint(c, x, 0, PIKA, PIKA_INKS)
+          if (q >= 0) write(c, x + SPRITE, 1, '?', YELLOW)
+          return
+        }
+
+        // The old disguise slides off it, the new one comes down over it.
+        paint(c, x, 10, SHADOW, SHADOW_INKS)
+
+        if (q < 8) {
+          paint(c, x, (q - 3) * 4, PIKA, PIKA_INKS)
+          write(c, x + SPRITE, 2, q % 2 ? '~ ~' : ' ~ ~', '#ffffff')
+        } else {
+          paint(c, x, 0, MIMIC.slice(MIMIC.length - (q - 7) * 4), MIMIC_INKS)
+        }
+
+        return
+      }
+
+      const r = q - 12
+      const isOff = r >= 7 && r < 18
+      const fainted = r >= 11 && r < 24
+      visited(s, fainted ? { faint: true } : r >= 24 ? { startle: r < 28 } : {})
+      // The head: nodding hello, then hanging at its side, then back on.
+      const nod = r < 6 ? r % 2 : 0
+      const [dx, dy] = isOff ? [4, 6] : r === 6 ? [2, 2] : r >= 18 && r < 22 ? [Math.max(0, 22 - r - 1), Math.max(0, 22 - r - 1)] : [0, nod]
+
+      paint(c, x, 9, MIMIC.slice(9), MIMIC_INKS)
+
+      if (isOff) {
+        // The neck open, a shadow in it, two red eyes.
+        paint(c, x + 2, 8, ['sssss', 'srsrs', 'sssss'], { s: '#1a1210', r: r % 2 ? '#ff3030' : '#ff8080' })
+      }
+
+      paint(c, x + dx, dy, MIMIC.slice(0, 9), MIMIC_INKS)
+
+      if (r >= 6 && r < 10) write(c, x + SPRITE, 0, 'POKI!', '#ffffff')
+      if (r >= 11 && r < 15) write(c, 0, 3, 'x_x', '#ffffff')
+
+      if (r >= 18 && r < 22) {
+        // A small dark hand, putting it back.
+        paint(c, x + 9, 6 - (r % 2), ['.K', 'KK', '.K'], MIMIC_INKS)
+        write(c, x + SPRITE + 1, 2, '…', '#ffffff')
+      }
+
+      if (r < 6) write(c, x + SPRITE, 1, r % 2 ? '♪' : ' ', YELLOW)
+      if (r >= 22) write(c, x + SPRITE, 1, '?', YELLOW)
+    },
+  },
+
+  // Happy, she can't help it: dressed up as a certain clown, red afro, white
+  // face, yellow suit, striped socks, big red shoes, her ears through the afro:
+  // "ran" with arms crossed on her chest, "ran" with her hands open by her chin,
+  // and "ruu" with both arms thrust straight up; twice.
+  ranranru: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x = Math.floor((width - CLOWN_W) / 2) - 2
+      // Per round: crossed 0-3, open 4-5, up 6-13; two rounds, the second held.
+      const round = p < 14 ? p : p - 14
+      const pose = round < 4 ? 'cross' : round < 6 ? 'open' : 'up'
+      const lift = pose === 'up' ? pick([1, 2, 2, 1, 1, 1, 1, 1], round - 6) : 0
+      paint(c, x, -2 - lift, CLOWN[pose], CLOWN_INKS)
+
+      // The chant, a word a pose, down the side.
+      const said = pose === 'cross' ? 1 : pose === 'open' ? 2 : 3
+      ;['RAN', 'RAN', 'RU!'].slice(0, said).forEach((word, i) => write(c, x + CLOWN_W + 1, 2 + i, word, i === 2 ? YELLOW : '#ffffff'))
+      if (pose === 'up') write(c, x + CLOWN_W + 1, 1, p % 2 ? '☆' : '★', YELLOW)
+    },
+  },
+
+  // Dressed as a certain teal-haired singer, twin tails swinging, she swings her
+  // leek to a polka.
+  miku: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x0 = Math.floor((width - SPRITE) / 2) - 2
+      const sway = pick([0, 1, 0, -1], Math.floor(p / 2))
+      rabbit(s, { x: x0 + sway, lift: p % 4 < 2 ? 0 : 1, isSquashed: false, eyes: p % 8 < 6 ? 'happy' : 'open', ears: p % 4 < 2 ? 'left' : 'right', arms: 'up', inks: MIKU })
+      const top = FLOOR - SPRITE_ROWS - (p % 4 < 2 ? 0 : 1)
+
+      // Twin tails from her hair ties to her ankles, swinging opposite her.
+      for (let y = top + 5; y < FLOOR; y += 1) {
+        const out = Math.min(2, Math.floor((y - top - 5) / 3)) * (sway >= 0 ? 1 : 0) + 1
+        dot(c, x0 + sway - out, y, y % 3 ? MIKU.T : MIKU.t)
+        dot(c, x0 + sway + SPRITE - 1 + out, y, y % 3 ? MIKU.T : MIKU.t)
+      }
+
+      // The leek, up and then down, to the beat.
+      const leek = p % 4 < 2 ? LEEK.rows : [...LEEK.rows].reverse()
+      paint(c, x0 + sway + 10, top + (p % 4 < 2 ? 0 : 8), leek, LEEK.inks)
+      write(c, x0 + sway + SPRITE + 5, 3 - (p % 6 < 3 ? 0 : 1), pick(['♪', '♫'], Math.floor(p / 3)), '#39c5bb')
+    },
+  },
+
+  // Dressed as a certain watery goddess, she raises an open fan and a fountain
+  // springs from it, arcing down either side; it gets away from her, and she
+  // sits down and bawls.
+  aqua: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x0 = Math.floor((width - SPRITE) / 2) - 2
+      const water = '#5fb4ff'
+      const isCrying = p >= 18
+      rabbit(s, { x: x0, lift: 0, isSquashed: isCrying, eyes: isCrying ? 'closed' : 'happy', ears: isCrying ? 'down' : 'up', arms: isCrying ? 'down' : 'up', inks: AQUA })
+      const top = FLOOR - SPRITE_ROWS + (isCrying ? 1 : 0)
+      // Her hair in a loop on top.
+      paint(c, x0 + 4, top + 2, ['.T.', 'T.T'], AQUA)
+
+      if (!isCrying) {
+        // An open folding fan held up in her right hand: ribs pink and white, a handle below.
+        // A big folding fan, wide at the top and gathered to its rivet, past her
+        // ear on her right, its handle down to her raised hand.
+        paint(c, x0 + 10, top + 3, ['PWPWPWP', '.PWPWP.', '..PWP..', '...h...', '..h....', '.h.....'], { P: '#ff7fb8', W: '#ffffff', h: '#c8a070' })
+      }
+
+      const jet = x0 + 13
+      if (p >= 3 && p < 13) {
+        // The fountain: a jet straight up from the fan, falling away to both sides.
+        const height = Math.min(top + 3 + 2, (p - 2) * 3)
+        for (let k = 0; k < height; k += 1) dot(c, jet, top + 2 - k, (k + p) % 3 ? water : '#ffffff')
+        if (p >= 6) {
+          for (const side of [-1, 1]) {
+            for (let d = 1; d <= 6; d += 1) {
+              const y = -1 + Math.floor((d * d) / 3)
+              if ((d + p) % 4 !== 0) dot(c, jet + side * d, y, (d + p) % 3 ? water : '#bfe4ff')
+            }
+          }
+          write(c, jet + 7, 0, p % 2 ? '✦' : '✧', YELLOW)
+        }
+      }
+
+      if (p >= 13 && p < 18) {
+        // Out of hand: water everywhere.
+        for (let k = 0; k < 20; k += 1) {
+          dot(c, Math.floor(hash(k + p * 31) * width), Math.floor(hash(k * 7 + p) * 16) - 1, k % 3 ? water : '#ffffff')
+        }
+      }
+
+      if (isCrying) {
+        // Tears pouring from both eyes into a spreading puddle.
+        for (const ex of [x0 + 3, x0 + 7]) {
+          for (let y = top + 8; y < FLOOR; y += 1) {
+            dot(c, ex + (ex < x0 + 5 ? -1 : 1) * Math.floor((y - top - 8) / 3), y, (y + p) % 3 ? '#e6f6ff' : '#bfe4ff')
+          }
+        }
+        const pool = Math.min(9, p - 16)
+        for (let dx = -pool; dx <= SPRITE + pool - 1; dx += 1) dot(c, x0 + dx, 15, (dx + p) % 2 ? water : '#8fd0ff')
+        write(c, x0 + SPRITE + 3, 2, 'T_T', p % 2 ? '#ffffff' : '#8fd0ff')
+      }
+    },
+  },
+
   // A handheld's boot: the logo slides down under her little head, chimes,
   // scatters, and gathers into her.
   bootHandheld: {
@@ -1493,6 +1893,11 @@ export const REEL: readonly { scene: SceneName; label: string; frames: number }[
   { scene: 'love', label: '被摸', frames: EVERYDAY },
   { scene: 'sleep', label: '睡覺', frames: EVERYDAY },
   { scene: 'welcome', label: '歡迎回來', frames: 21 },
+  { scene: 'ditto', label: '百變怪', frames: 44 },
+  { scene: 'mimikyu', label: '謎擬Q', frames: 58 },
+  { scene: 'ranranru', label: '藍藍路', frames: 28 },
+  { scene: 'miku', label: '初音 cosplay', frames: 28 },
+  { scene: 'aqua', label: '阿克婭 cosplay', frames: 32 },
   { scene: 'transform', label: '變身', frames: 32 },
   { scene: 'blast', label: '全力全開', frames: 42 },
 ]
@@ -1533,7 +1938,8 @@ const WORD_SCENES: readonly (readonly [RegExp, SceneName])[] = [
   [/sprout|germinat|grow|bloom|cultivat|pollinat|photosynth|propagat|unfurl|hatch|incubat/, 'grow'],
   [/burrow|spelunk|dig|excavat|forag|rummag/, 'dig'],
   [/nibbl|munch|chew|snack|noodl|digest|savor/, 'carrot'],
-  [/vib|groov|boogi|danc|jitterbug|shimm|frolic|jam|bebop/, 'dance'],
+  [/vib|groov|jam|bebop|harmoni|serenad|sing|croon|whistl|hum/, 'miku'],
+  [/boogi|danc|jitterbug|shimm|frolic/, 'dance'],
   [/juggl|shuffl|wrangl|herd|orchestrat/, 'juggle'],
   [/conjur|manifest|transmut|enchant|alchem|metamorph|crystalli|levitat/, 'magic'],
   [/mosey|wander|meander|stroll|perambul|scamper|scurr|gallop|zoom|dash|hop|waddl|dilly|gallivant|schlep/, 'walk'],

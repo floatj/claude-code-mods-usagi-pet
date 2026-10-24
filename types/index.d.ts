@@ -11,6 +11,10 @@ export type Mood =
   | 'blast'
   | 'welcome'
   | 'boot'
+  | 'ditto'
+  | 'mimikyu'
+  | 'ranranru'
+  | 'aqua'
 
 export type Bunny = {
   mood: Mood

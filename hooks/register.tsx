@@ -21,7 +21,21 @@ const TRANSFORM_CHANCE = 0.2
 const WAKE_TRANSFORM_CHANCE = 0.25
 const BLAST_AFTER_MS = 120_000
 // Set pieces a tool call does not cut short.
-const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot']
+const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua']
+// Now and then an edit brings the shapeshifter; a failure, the goddess or the
+// ghost in its disguise; a finished turn, the clown's chant.
+const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/
+const DITTO_CHANCE = 0.05
+const AQUA_CHANCE = 0.1
+const MIMIKYU_CHANCE = 0.07
+const RANRANRU_CHANCE = 0.07
+
+/** What a failed tool brings on: her sorrow, or now and then a parody of it. */
+const failure = (): Mood => {
+  const roll = Math.random()
+
+  return roll < AQUA_CHANCE ? 'aqua' : roll < AQUA_CHANCE + MIMIKYU_CHANCE ? 'mimikyu' : 'sad'
+}
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
@@ -127,17 +141,23 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     running += 1
     const startedAt = await $.clock.now()
-    await update($, pet, b => (SHOWS.includes(b.mood) ? { ...b, tool: e.tool } : setMood(b, 'working', startedAt, e.tool)))
+    const isDitto = EDITS.test(e.tool) && Math.random() < DITTO_CHANCE
+    await update($, pet, b =>
+      SHOWS.includes(b.mood) ? { ...b, tool: e.tool } : setMood(b, isDitto ? 'ditto' : 'working', startedAt, e.tool),
+    )
     wake($)
 
     try {
       const ran = await next(e)
       const isFailed = ran.deny !== undefined || ran.isError === true
-      const mood: Mood = isFailed ? 'sad' : 'thinking'
       const now = await $.clock.now()
 
-      if (running === 1 || isFailed) {
+      if (isFailed) {
+        const mood = failure()
         await update($, pet, b => setMood(b, mood, now))
+      } else if (running === 1) {
+        // Back to thinking, unless a set piece is still playing.
+        await update($, pet, b => (SHOWS.includes(b.mood) ? b : setMood(b, 'thinking', now)))
       }
 
       return ran
@@ -149,7 +169,11 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const now = await $.clock.now()
     await update($, pet, b => ({
-      ...setMood(b, b.mood === 'sad' ? 'sad' : now - turnAt >= BLAST_AFTER_MS ? 'blast' : 'happy', now),
+      // A sorrow or a set piece still playing stays; else a blast after a long turn,
+      // now and then the clown's chant, and otherwise her joy.
+      ...(b.mood === 'sad' || SHOWS.includes(b.mood)
+        ? b
+        : setMood(b, now - turnAt >= BLAST_AFTER_MS ? 'blast' : Math.random() < RANRANRU_CHANCE ? 'ranranru' : 'happy', now)),
       isBusy: false,
     }))
     wake($)
