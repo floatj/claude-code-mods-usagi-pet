@@ -175,7 +175,7 @@ const isGoingRight = (t: number, span: number) => span <= 0 || t % (span * 2) < 
 // ---- The rabbit ----
 
 type Ears = 'up' | 'left' | 'right' | 'out' | 'down'
-type Eyes = 'open' | 'left' | 'right' | 'closed' | 'happy' | 'wide' | 'heart'
+type Eyes = 'open' | 'left' | 'right' | 'closed' | 'happy' | 'wide'
 type Feet = 'sit' | 'a' | 'b' | 'tuck'
 type Arms = 'down' | 'up' | 'left' | 'right' | 'reach' | 'forward'
 
@@ -279,9 +279,6 @@ const eyes = (c: Canvas, x: number, y: number, look: Eyes, inks = INKS) => {
       }
     } else if (look === 'happy') {
       dot(c, at, y, INKS.K!)
-    } else if (look === 'heart') {
-      dot(c, at, y, INKS.H!)
-      dot(c, at, y + 1, INKS.H!)
     } else {
       dot(c, at, y, INKS.K!)
       dot(c, at, y + 1, inks.k!)
@@ -1132,7 +1129,7 @@ const SCENES = {
   love: {
     draw: s => {
       const p = s.since
-      rabbit(s, { eyes: 'heart', lift: p % 8 < 4 ? pick([0, 1, 2, 1], p) : 0, isSquashed: false, ears: p % 8 < 4 ? 'up' : 'left' })
+      rabbit(s, { eyes: 'open', lift: p % 8 < 4 ? pick([0, 1, 2, 1], p) : 0, isSquashed: false, ears: p % 8 < 4 ? 'up' : 'left' })
       write(s.c, 10, 3 - (p % 4), '♡', MAGENTA)
       write(s.c, 0, 2 - ((p + 2) % 3), '♡', PINK)
       write(s.c, 12, 2 - ((p + 1) % 3), '♡', RED)
