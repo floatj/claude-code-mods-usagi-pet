@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { INITIAL, setMood, SLEEP_AFTER_MS, step } from './bunny'
+import { forecastOf, LOCATORS, weatherOf } from './weather'
 import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, REEL, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = {
@@ -58,6 +59,22 @@ test('her window shows the sun by day, a sunset at dusk and the moon at night', 
   expect([at(5, 59), at(6), at(16, 59), at(17), at(18, 59), at(19), at(3)]).toEqual(['night', 'day', 'day', 'dusk', 'dusk', 'night', 'night'])
   const drawn = (['day', 'dusk', 'night'] as const).map(sky => JSON.stringify(frameRows('sleep', 0, MAX_STAGE, 0, sky)))
   expect(new Set(drawn).size).toBe(3)
+})
+
+test('the weather is read from Open-Meteo and the locators, and rains at her window', () => {
+  expect([0, 3, 51, 63, 81, 71, 95, 99].map(weatherOf)).toEqual(['clear', 'clear', 'rain', 'rain', 'rain', 'rain', 'storm', 'storm'])
+  expect(forecastOf('{"current":{"weather_code":81}}')).toBe('rain')
+  expect(forecastOf('not json')).toBeUndefined()
+  expect(LOCATORS[0]!.read({ success: true, latitude: 24.9936806, longitude: 121.2969641 })).toEqual({ latitude: 24.99, longitude: 121.3 })
+  expect(LOCATORS[0]!.read({ success: false })).toBeUndefined()
+  expect(LOCATORS[1]!.read({ latitude: '24.9977', longitude: '121.2965' })).toEqual({ latitude: 25, longitude: 121.3 })
+
+  for (const sky of ['day', 'dusk', 'night'] as const) {
+    const [clear, rain, storm] = (['clear', 'rain', 'storm'] as const).map(one => JSON.stringify(frameRows('sleep', 0, MAX_STAGE, 0, sky, one)))
+    expect(rain).not.toBe(clear)
+    // Frame 0 is a strike.
+    expect(storm).not.toBe(rain)
+  }
 })
 
 test('the scene follows her mood, the running tool, the spinner word and a long turn', () => {

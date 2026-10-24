@@ -4,6 +4,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { Mood } from '../types'
 import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
 import { FRAME_MS, frameRows, MAX_STAGE, REEL, reelAt, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { forecastOf, forecastUrl, LOCATORS, WEATHER_MS } from './weather'
+import type { Place, Weather } from './weather'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
@@ -37,6 +39,34 @@ let period = 0
 let turnAt = 0
 // The frame the play-all reel started on, while it runs.
 let reelFrom: number | undefined
+// The weather at her window, and where she is, found once a session.
+let weather: Weather = 'clear'
+let place: Place | undefined
+
+const locate = async ($: EngineInterface): Promise<Place | undefined> => {
+  for (const { url, read: readPlace } of LOCATORS) {
+    const found = await $.http
+      .fetch(url)
+      .then(res => (res.ok ? readPlace(JSON.parse(res.text)) : undefined))
+      .catch(() => undefined)
+
+    if (found) {
+      return found
+    }
+  }
+
+  return undefined
+}
+
+// Reads the weather afresh; on any failure it keeps what it had, clear to begin with.
+const readWeather = async ($: EngineInterface) => {
+  place ??= await locate($)
+
+  if (place) {
+    const res = await $.http.fetch(forecastUrl(place)).catch(() => undefined)
+    weather = (res?.ok ? forecastOf(res.text) : undefined) ?? weather
+  }
+}
 
 const wake = ($: EngineInterface) => {
   frames ??= $.clock.every(FRAME_MS, () => void frame($))
@@ -69,6 +99,8 @@ export const register: Register = on => {
     // A reload starts the module over, its timers gone with it.
     frames = undefined
     wake($)
+    void readWeather($)
+    $.clock.every(WEATHER_MS, () => void readWeather($))
 
     return next(e)
   })
@@ -144,8 +176,8 @@ export const register: Register = on => {
     const reel = reelFrom === undefined ? undefined : reelAt(b.tick - reelFrom)
     reelFrom = reel === undefined ? undefined : reelFrom
     const stage = reel
-      ? frameRows(reel.scene, b.tick, width, reel.since, sky)
-      : frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick, sky)
+      ? frameRows(reel.scene, b.tick, width, reel.since, sky, weather)
+      : frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick, sky, weather)
     const color = reel ? 'magenta' : COLOR[b.mood]
 
     return (

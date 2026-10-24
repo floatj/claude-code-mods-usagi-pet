@@ -1,4 +1,5 @@
 import type { Bunny } from '../types'
+import type { Weather } from './weather'
 
 // The rabbit's stage, after clawd-actor's (github.com/BrianHuang813/clawd-actor): a scene
 // draws her and her props for one frame, and the frames follow what the turn is doing.
@@ -233,7 +234,7 @@ type Pose = {
 type Stroll = { dx: number; isMoving: boolean; lift: number; isSquashed: boolean; dir: 1 | -1 }
 const STILL: Stroll = { dx: 0, isMoving: false, lift: 0, isSquashed: false, dir: 1 }
 
-type Shot = { c: Canvas; t: number; since: number; width: number; isRoomy: boolean; sky: Sky; stroll: Stroll }
+type Shot = { c: Canvas; t: number; since: number; width: number; isRoomy: boolean; sky: Sky; weather: Weather; stroll: Stroll }
 
 // The face a scene leaves alone: a look around, a blink or two; on the move
 // she looks where she is going.
@@ -444,7 +445,46 @@ export const skyAt = (ms: number): Sky => {
 // A star's colors as it twinkles: bright, warm, cool, dim.
 const TWINKLE = ['#ffffff', '#fff1a8', '#b8d8ff', '#56648a']
 
-const view = (c: Canvas, x: number, t: number, sky: Sky) => {
+// Rain at her window, by the time of day: the sky behind it, its clouds, the
+// rain, and, in a storm, the sky lit and the bolt.
+const RAINY: Record<Sky, { sky: string; cloud: string; rain: string; flash: string }> = {
+  day: { sky: '#8fa3b8', cloud: '#c9d1db', rain: '#e8f2ff', flash: '#e9eef7' },
+  // The day's rain, darkened and warmed a little.
+  dusk: { sky: '#6f6070', cloud: '#9a8d98', rain: '#d9cfe0', flash: '#cfc4d8' },
+  night: { sky: '#141b2b', cloud: '#2f3850', rain: '#8aa4c8', flash: '#5a6a8a' },
+}
+const BOLT = '#fff6a0'
+// The bolt's half-pixel column on each row below the clouds, zigzagging down.
+const ZIGZAG = [9, 7, 8, 6, 5]
+// In a storm the bolt strikes on one frame in this many.
+const STRIKE_EVERY = 7
+
+/** Rows of half pixels for a rainy window: clouds along the top, streaks falling slantwise below. */
+const rainRows = (t: number, isStrike: boolean): string[] => [
+  'C'.repeat(14),
+  isStrike ? 'W'.repeat(9) + 'L' + 'W'.repeat(4) : 'CC.CCC..CCCC.C',
+  ...ZIGZAG.map((bolt, i) =>
+    Array.from({ length: 14 }, (_, at) => {
+      if (isStrike) {
+        return at === bolt ? 'L' : 'W'
+      }
+
+      // Below the clouds' ragged edge the sky shows clear for a row, then rain.
+      return i >= 1 && (at + 2 * i + 2 * t) % 7 === 0 ? 'r' : '.'
+    }).join(''),
+  ),
+]
+
+const view = (c: Canvas, x: number, t: number, sky: Sky, weather: Weather = 'clear') => {
+  if (weather !== 'clear') {
+    const colors = RAINY[sky]
+    paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', 'X')), { ...INKS, X: colors.sky })
+    const isStrike = weather === 'storm' && t % STRIKE_EVERY === 0
+    fine(c, x + 1, 1, rainRows(t, isStrike), 'X', { ...INKS, X: colors.sky, C: colors.cloud, r: colors.rain, W: colors.flash, L: BOLT })
+
+    return
+  }
+
   const { blank, rows } = SKIES[sky]
   paint(c, x, 0, WINDOW.map(row => row.replaceAll('.', blank)))
   fine(c, x + 1, 1, rows, blank, sky === 'night' ? { ...INKS, D: pick(TWINKLE, t), d: pick(TWINKLE, t + 2) } : INKS)
@@ -1075,7 +1115,7 @@ const SCENES = {
       laptop(s, RESTING, LAPTOP_COLOR, true, x + PROP_X)
 
       if (hasRoom || (s.isRoomy && x <= overTable)) {
-        view(s.c, hasRoom ? x - pane : x + PROP_X + 2, s.t, s.sky)
+        view(s.c, hasRoom ? x - pane : x + PROP_X + 2, s.t, s.sky, s.weather)
       }
 
       const z = s.t % 6
@@ -1600,16 +1640,16 @@ const quartersOf = (quarters: readonly (string | undefined)[]): Glyph | undefine
 /**
  * One frame of the stage, `STAGE_ROWS` rows of same-colored runs, `width` cells
  * each. `t` is her frame counter, `since` the frames her mood has lasted, and
- * `sky` what her window shows.
+ * `sky` and `weather` what her window shows.
  */
-export const frameRows = (name: SceneName, t: number, width: number, since = t, sky: Sky = 'night'): Run[][] => {
+export const frameRows = (name: SceneName, t: number, width: number, since = t, sky: Sky = 'night', weather: Weather = 'clear'): Run[][] => {
   const columns = Math.max(1, Math.min(Math.floor(width), MAX_STAGE))
   const scene: Scene = SCENES[name]
   const isRoomy = columns >= ROOMY
   const extent = scene.strolls === undefined ? undefined : isRoomy ? scene.strolls : SPRITE
   const stroll = extent === undefined ? STILL : strollAt(t, columns - extent)
   const c = canvasOf(columns)
-  scene.draw({ c, t, since, width: columns, isRoomy, sky, stroll })
+  scene.draw({ c, t, since, width: columns, isRoomy, sky, weather, stroll })
   // A scene that neither strolls nor fills the stage sits in the middle of it.
   const centered = Math.floor((columns - (isRoomy ? ROOMY : SPRITE)) / 2)
   const dx = scene.isWide ? 0 : extent === undefined ? centered : stroll.dx
