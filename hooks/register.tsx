@@ -13,11 +13,13 @@ const ROWS = 12
 const SHIFT_LEFT = 3
 // Asleep she breathes slowly: her frame moves on one clock period in this many.
 const SLEEP_EVERY = 8
-// A prompt now and then sets her transforming; a turn this long ends in a blast.
+// A prompt now and then sets her transforming, a little more often one that
+// wakes her; a turn this long ends in a blast.
 const TRANSFORM_CHANCE = 0.2
+const WAKE_TRANSFORM_CHANCE = 0.25
 const BLAST_AFTER_MS = 120_000
 // Set pieces a tool call does not cut short.
-const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome']
+const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot']
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
@@ -61,6 +63,9 @@ export const register: Register = on => {
     })
     void $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
     seed = Math.floor(await $.clock.now()) % 997
+    // A new session boots her up; a reload, which finds her already going, does not.
+    const now = await $.clock.now()
+    await update($, pet, b => (b.tick === 0 ? setMood(b, 'boot', now) : b))
     // A reload starts the module over, its timers gone with it.
     frames = undefined
     wake($)
@@ -77,9 +82,10 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const now = await $.clock.now()
     turnAt = now
-    // Woken, she greets you; else a start, or now and then a transformation.
+    // Now and then she transforms; else, woken, she greets you, and awake she starts.
     const isAsleep = (await read($, pet)).mood === 'sleepy'
-    const mood: Mood = isAsleep ? 'welcome' : Math.random() < TRANSFORM_CHANCE ? 'transform' : 'shock'
+    const isTransforming = Math.random() < (isAsleep ? WAKE_TRANSFORM_CHANCE : TRANSFORM_CHANCE)
+    const mood: Mood = isTransforming ? 'transform' : isAsleep ? 'welcome' : 'shock'
     await update($, pet, b => ({ ...setMood(b, mood, now), isBusy: true, turnTick: b.tick }))
     wake($)
 

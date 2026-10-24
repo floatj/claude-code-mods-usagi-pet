@@ -101,7 +101,7 @@ test('the pane draws the bunny and petting it shows love', async ($, on) => {
   }
 })
 
-test('the session clock moves her: slowly asleep, greeting you as a prompt wakes her, a blast after a long turn', async ($, on) => {
+test('the session clock moves her: booted up, slowly asleep, greeting you or transforming as a prompt wakes her, a blast after a long turn', async ($, on) => {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -123,13 +123,16 @@ test('the session clock moves her: slowly asleep, greeting you as a prompt wakes
   }
 
   await clock.advance(FRAME_MS)
+  expect(await ui.find({ type: 'Text', text: /兔兔 啟動/ })).toBeDefined()
+  await clock.advance(5_400)
   expect(await ui.find({ type: 'Text', text: /睡著了/ })).toBeDefined()
   const asleep = await framesOver(16)
   expect(asleep).toBeGreaterThan(1)
   expect(asleep).toBeLessThan(4)
 
   await $.prompt.submit({ text: 'hi' } as never)
-  expect(await ui.find({ type: 'Text', text: /歡迎回來/ })).toBeDefined()
+  // Woken, she greets you or, now and then, transforms.
+  expect(await ui.find({ type: 'Text', text: /歡迎回來|變身/ })).toBeDefined()
   expect(await framesOver(16)).toBeGreaterThan(asleep)
 
   await clock.advance(120_000)
@@ -142,13 +145,13 @@ test('the play-all button plays every scene in turn, and stops when pressed agai
   expect(REEL.map(one => one.scene).sort()).toEqual([...SCENE_NAMES].sort())
   const ui = await $.ui.mount({ plugin: 'bunny', surface: 'terminal', ...PANE })
   await ui.press({ key: 'reel' })
-  expect(await ui.find({ type: 'Text', text: /▶ 1\/\d+ 發呆/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /▶ 1\/\d+ 開機：掌機/ })).toBeDefined()
 
-  for (let at = 0; at < 20; at += 1) {
+  for (let at = 0; at < REEL[0]!.frames; at += 1) {
     await clock.advance(FRAME_MS)
   }
 
-  expect(await ui.find({ type: 'Text', text: /▶ 2\/\d+ 思考/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /▶ 2\/\d+ 開機：BIOS/ })).toBeDefined()
   await ui.press({ key: 'reel' })
   expect(await ui.find({ type: 'Text', text: /▶ \d+\// })).toBeUndefined()
   await ui.unmount()

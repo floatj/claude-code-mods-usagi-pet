@@ -10,6 +10,7 @@ export type Mood =
   | 'transform'
   | 'blast'
   | 'welcome'
+  | 'boot'
 
 export type Bunny = {
   mood: Mood

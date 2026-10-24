@@ -581,7 +581,288 @@ const HALF = 30
 const SPENT = 32
 const HEART = ['.H.H.', 'HHHHH', 'HHHHH', '.HHH.', '..H..']
 
+// ---- Boot screens ----
+
+// A 3 x 5 pixel font for the logo.
+const FONT: Record<string, readonly string[]> = {
+  U: ['X.X', 'X.X', 'X.X', 'X.X', 'XXX'],
+  S: ['XXX', 'X..', 'XXX', '..X', 'XXX'],
+  A: ['XXX', 'X.X', 'XXX', 'X.X', 'X.X'],
+  G: ['XXX', 'X..', 'X.X', 'X.X', 'XXX'],
+  I: ['XXX', '.X.', '.X.', '.X.', 'XXX'],
+}
+const LOGO = 'USAGI'
+const logoRows = () =>
+  Array.from({ length: 5 }, (_, r) => [...LOGO].map(ch => FONT[ch]![r]).join('.'))
+
+/** Her pixels as they would be drawn standing at x: where each goes and its color. */
+const pixelsOf = (s: Shot, pose: Pose) => {
+  const temp = canvasOf(s.c.width)
+  rabbit({ ...s, c: temp }, pose)
+  const out: { x: number; y: number; color: string }[] = []
+  temp.px.forEach((line, row) => line.forEach((color, x) => color !== undefined && out.push({ x, y: row - SKY * 2, color })))
+  return out
+}
+
+// Her little head, for logos.
+const BADGE = ['.F.F.', '.P.P.', 'FFFFF', 'FKFKF', 'FFPFF']
+// Playing cards, thrown from the hole: where each flies and how it looks.
+const CARDS: readonly (readonly [number, string, string])[] = [[-1, '♠', '#ffffff'], [1, '♥', RED], [-3, '♦', RED], [3, '♣', '#ffffff']]
+// A gentleman's top hat, banded in pink.
+const HAT = ['.KKK.', '.KKK.', '.PPP.', 'KKKKK']
+const HAT_INKS = { ...INKS, K: '#6a5a9a', P: '#ff8fc8' }
+
+const hash = (n: number) => ((n * 2654435761) >>> 0) % 1000 / 1000
+
 const SCENES = {
+  // A handheld's boot: the logo slides down under her little head, chimes,
+  // scatters, and gathers into her.
+  bootHandheld: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const rows = logoRows()
+      const lx = Math.floor((width - rows[0]!.length) / 2)
+      const x0 = Math.floor((width - SPRITE) / 2)
+
+      if (p < 14) {
+        const y = Math.min(6, -5 + Math.round(p * 1.3))
+        const color = p >= 10 && p % 2 ? '#ffffff' : '#9cc3f5'
+        paint(c, Math.floor((width - 5) / 2), y - 6, BADGE)
+        paint(c, lx, y, rows, { X: color })
+        if (p >= 10) write(c, lx + rows[0]!.length + 1, Math.floor(y / 2), '♪', YELLOW)
+        return
+      }
+
+      if (p < 21) {
+        const from: { x: number; y: number }[] = []
+        rows.forEach((row, r) => [...row].forEach((k, i) => k === 'X' && from.push({ x: lx + i, y: 6 + r })))
+        const to = pixelsOf(s, { x: x0, lift: 0, isSquashed: false, eyes: 'closed' })
+        const t = (p - 14) / 6
+        to.forEach((one, i) => {
+          const start = from[i % from.length]!
+          const k = Math.min(1, Math.max(0, t * 1.4 - hash(i) * 0.4))
+          dot(c, Math.round(start.x + (one.x - start.x) * k), Math.round(start.y + (one.y - start.y) * k), k < 1 ? '#9cc3f5' : one.color)
+        })
+        return
+      }
+
+      rabbit(s, { x: x0, lift: 0, isSquashed: false, eyes: p === 23 ? 'closed' : 'open', ears: p >= 24 && p < 26 ? 'left' : 'up' })
+    },
+  },
+
+  // A power-on self test in green under her little head, a progress bar, a
+  // command typed, the screen cleared a line at a time, and she drops in.
+  bootBios: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x0 = Math.floor((width - SPRITE) / 2)
+      const ink = '#5fd75f'
+      const lines = ['USAGI BIOS v1.0', 'EARS ......', 'MAID DRESS .', 'CARROT .....']
+
+      if (p < 25) {
+        // Cleared from the top, a line each frame, once the command is in.
+        const gone = Math.max(0, p - 21)
+        if (gone < 1) {
+          // After the energy saver's logo: her head in a soft white, a yellow
+          // swoosh curving up round its right side, a star at its tip.
+          const bx = width - 7
+          paint(c, bx - 1, 2, BADGE, { F: '#d8dbe4', P: '#e895a6', K: '#1a1a22' })
+          paint(c, bx + 4, 0, ['Y..', '.Y.', '..Y', '..Y', '..Y', '.Y.', 'Y..'], { Y: YELLOW })
+          write(c, bx + 3, -1, '✦', YELLOW)
+        }
+
+        lines.forEach((line, i) => {
+          if (p >= i * 3 && i >= gone) {
+            write(c, 1, i - 1, line, i === 0 ? '#ffffff' : ink)
+            if (i > 0 && p >= i * 3 + 2) write(c, 1 + line.length + 1, i - 1, 'OK', '#ffffff')
+          }
+        })
+        if (p >= 12 && gone < 5) {
+          const done = Math.min(10, (p - 11) * 2)
+          write(c, 1, 5, `[${'#'.repeat(done)}${' '.repeat(10 - done)}] ${done * 10}%`, ink)
+        }
+        const typed = '> boot usagi'.slice(0, Math.max(0, (p - 18) * 4))
+        if (gone < 6) write(c, 1, 6, typed + (p % 2 === 0 ? '_' : ' '), ink)
+        return
+      }
+
+      const lift = p < 30 ? pick([12, 8, 4, 1, 0], p - 25) : 0
+      rabbit(s, { x: x0, lift, isSquashed: p === 30, eyes: p < 30 ? 'wide' : 'happy', arms: p >= 31 ? 'up' : 'down', feet: lift > 0 ? 'tuck' : 'sit', ears: p < 30 ? 'up' : 'out' })
+    },
+  },
+
+  // Out of a rabbit hole: dirt flies, her ears peek and look about, she leaps
+  // out with playing cards, a top hat drops onto her head, and she checks her watch.
+  bootHole: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x0 = Math.floor((width - SPRITE) / 2)
+      const hole = (open: number) => {
+        for (let dx = -open; dx <= open; dx += 1) {
+          dot(c, x0 + 5 + dx, 15, Math.abs(dx) === open ? INKS.N! : '#120c08')
+          if (Math.abs(dx) < open) dot(c, x0 + 5 + dx, 14, Math.abs(dx) === open - 1 ? INKS.n! : '#120c08')
+        }
+      }
+
+      if (p < 6) {
+        hole(Math.min(6, p + 2))
+        for (let k = 0; k < 4; k += 1) {
+          const side = k % 2 ? 1 : -1
+          dot(c, x0 + 5 + side * (4 + p + k), 13 - Math.max(0, 3 - Math.abs(p - 2)) + k % 2, INKS.N!)
+        }
+        return
+      }
+
+      if (p < 12) {
+        rabbit(s, { x: x0, lift: -10, isSquashed: false, ears: pick(['up', 'left', 'up', 'right'] as const, Math.floor((p - 6) / 1.5)) })
+        hole(6)
+        return
+      }
+
+      if (p < 16) {
+        rabbit(s, { x: x0, lift: pick([-5, 1, 3, 2], p - 12), isSquashed: false, arms: 'up', eyes: 'happy', ears: 'left', feet: 'tuck' })
+        hole(p < 14 ? 6 : 4)
+      } else {
+        if (p < 18) hole(18 - p)
+        rabbit(s, { x: x0, lift: 0, isSquashed: p === 16, eyes: p >= 25 ? 'right' : 'happy', arms: p >= 25 ? 'right' : 'down' })
+      }
+
+      // Cards thrown up out of the hole as she leaps, falling away.
+      if (p >= 12 && p < 22) {
+        CARDS.forEach(([dx, ch, color], i) => {
+          const up = p - 12
+          const y = 6 - up + Math.floor((up * up) / 6) + (i % 2)
+          write(c, x0 + 5 + Math.sign(dx) * (5 + Math.abs(dx) + up), y, ch, color)
+        })
+      }
+
+      // A top hat, dropped onto her head.
+      if (p >= 18) {
+        const head = FLOOR - SPRITE_ROWS
+        paint(c, x0 + 3, Math.min(head, head - 12 + (p - 18) * 3), HAT, HAT_INKS)
+      }
+
+      // And her pocket watch, ticking.
+      if (p >= 25) {
+        const top = FLOOR - SPRITE_ROWS
+        paint(c, x0 + 10, top + 10, ['.Y.', 'YwY', '.Y.'], { ...INKS, Y: YELLOW, w: p % 2 ? '#ffffff' : '#ffe9a0' })
+        if (p % 4 < 2) write(c, x0 + 13, Math.floor((top + 9) / 2), '♪', '#ffffff')
+      }
+    },
+  },
+
+  // A summoning: two circles drawn turning opposite ways, a pillar of light
+  // with motes rising in it, she is scanned in from her ears down, and a ring of
+  // gold bursts out as she arrives.
+  bootSummon: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x0 = Math.floor((width - SPRITE) / 2)
+      const ring = (rx: number, ry: number, arc: number, turn: number, colors: readonly string[]) => {
+        for (let k = 0; k < arc; k += 1) {
+          const angle = (k / 24) * Math.PI * 2 + turn
+          dot(c, x0 + 5 + Math.round(Math.cos(angle) * rx), 14 + Math.round(Math.sin(angle) * ry), pick(colors, k + p))
+        }
+      }
+      const outer = ['#c77dff', '#ffffff', '#c77dff', '#7fc8ff']
+      const inner = ['#ff8fc8', '#ffffff', '#fff3b0']
+
+      ring(9, 1.5, Math.min(24, (p + 1) * 4), p * 0.15, outer)
+      if (p >= 3) ring(6, 1, Math.min(24, (p - 2) * 5), -p * 0.25, inner)
+      if (p < 7) return
+
+      const top = p < 11 ? 15 - (p - 6) * 4 : -2
+      for (let y = Math.max(-2, top); y < 14; y += 1) {
+        const edge = pick(['#fff3b0', '#ffffff', '#ffd6f0'], y + p)
+        dot(c, x0 - 1, y, edge)
+        dot(c, x0 + SPRITE, y, edge)
+      }
+
+      // Motes rising in the light.
+      for (let k = 0; k < 4; k += 1) {
+        const y = 13 - ((p * 2 + k * 5) % 15)
+        if (y >= top) dot(c, x0 + 1 + ((k * 3 + p) % 9), y, k % 2 ? '#fff3b0' : '#ffffff')
+      }
+
+      if (p >= 11 && p < 23) {
+        rabbit(s, { x: x0, lift: 0, isSquashed: false, eyes: 'closed', ears: 'up' })
+        const scan = -2 + (p - 10) * 2
+        for (let y = Math.max(-2, scan); y < 16; y += 1) {
+          for (let at = x0; at < x0 + SPRITE; at += 1) {
+            const line = c.px[y + SKY * 2]
+            if (line) line[at] = y === scan || y === scan + 1 ? (line[at] === undefined ? undefined : '#ffffff') : undefined
+            c.halves[y + SKY * 2]![at] = undefined
+          }
+        }
+        for (let row = Math.floor(scan / 2) + 1; row < 8; row += 1) {
+          const line = c.glyphs[row + SKY]
+          for (let at = x0; at < x0 + SPRITE; at += 1) if (line?.[at]?.isWorn) line[at] = undefined
+        }
+      }
+
+      if (p >= 23) {
+        rabbit(s, { x: x0, lift: 0, isSquashed: false, eyes: 'happy', ears: p % 4 < 2 ? 'up' : 'out', arms: p < 26 ? 'up' : 'down' })
+        // A ring of gold bursting out from her.
+        const r = (p - 22) * 3
+        for (let k = 0; k < 16; k += 1) {
+          const angle = (k * Math.PI) / 8
+          dot(c, x0 + 5 + Math.round(Math.cos(angle) * r), 7 + Math.round(Math.sin(angle) * r * 0.7), k % 2 ? YELLOW : '#ffffff')
+        }
+        write(c, x0 + SPRITE + 2, 1, p % 2 ? '✦' : '✧', YELLOW)
+        write(c, x0 - 3, 2, p % 2 ? '✧' : '✦', PINK)
+      }
+
+      write(c, x0 + (p % 9), Math.floor(top / 2) + 1, '✧', YELLOW)
+    },
+  },
+
+  // A loading screen: her pixels fly in one by one as the bar fills; full, it
+  // turns her blue, a gleam runs along it, and she opens her eyes.
+  bootLoading: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x0 = Math.max(0, Math.floor((width - SPRITE - 11) / 2))
+      const to = pixelsOf(s, { x: x0, lift: 0, isSquashed: false, eyes: p < 22 ? 'closed' : 'open' })
+      const order = to.map((one, i) => ({ ...one, at: hash(i * 7 + 3) }))
+      const shown = Math.min(1, p / 20)
+
+      order.forEach((one, i) => {
+        const k = Math.min(1, Math.max(0, (shown - one.at * 0.85) / 0.15))
+        if (k <= 0) return
+        const sx = Math.round(hash(i) * (width - 1))
+        const sy = Math.round(hash(i + 99) * 17) - 2
+        dot(c, Math.round(sx + (one.x - sx) * k), Math.round(sy + (one.y - sy) * k), k < 1 ? '#9cc3f5' : one.color)
+      })
+
+      if (p >= 22) rabbit(s, { x: x0, lift: 0, isSquashed: false, eyes: p === 24 ? 'closed' : 'open', ears: p === 22 ? 'left' : 'up' })
+
+      const bx = x0 + SPRITE + 1
+      const done = Math.min(8, Math.floor(shown * 8))
+      write(c, bx, 2, 'LOADING', '#9cc3f5')
+
+      if (p < 20) {
+        write(c, bx, 3, `${'■'.repeat(done)}${'□'.repeat(8 - done)}`, '#ff8fc8')
+      } else {
+        // Full: her blue, a gleam running along it.
+        const gleam = p - 20
+        for (let i = 0; i < 8; i += 1) write(c, bx + i, 3, '■', i === gleam ? '#ffffff' : '#9cc3f5')
+      }
+
+      write(c, bx, 4, `${Math.round(shown * 100)}%`, '#ffffff')
+      if (p >= 20 && p < 24) write(c, bx + 5, 4, '♪', YELLOW)
+    },
+  },
+
   // A magical girl's transformation: she leaps with a star raised, flashes with
   // light bursting from her, ribbons circle and close in, then wind up her from
   // her shoes, dressing her anew where they pass; a last flash, and she lands in
@@ -1138,12 +1419,19 @@ const SCENES = {
 } satisfies Record<string, Scene>
 
 export type SceneName = keyof typeof SCENES
+// The boot screens, one of them played as a session starts.
+const BOOTS: readonly SceneName[] = ['bootHandheld', 'bootBios', 'bootHole', 'bootSummon', 'bootLoading']
 export const SCENE_NAMES = Object.keys(SCENES) as SceneName[]
 
-// Every scene in turn, for the play-all button: each everyday one for three
-// seconds, the set pieces whole, the blast last.
+// Every scene in turn, for the play-all button: the boot screens first, each
+// everyday one for three seconds, the set pieces whole, the blast last.
 const EVERYDAY = 20
 export const REEL: readonly { scene: SceneName; label: string; frames: number }[] = [
+  { scene: 'bootHandheld', label: '開機：掌機', frames: 28 },
+  { scene: 'bootBios', label: '開機：BIOS', frames: 34 },
+  { scene: 'bootHole', label: '開機：兔子洞', frames: 32 },
+  { scene: 'bootSummon', label: '開機：召喚', frames: 28 },
+  { scene: 'bootLoading', label: '開機：讀取', frames: 28 },
   { scene: 'idle', label: '發呆', frames: EVERYDAY },
   { scene: 'think', label: '思考', frames: EVERYDAY },
   { scene: 'type', label: '打字', frames: EVERYDAY },
@@ -1234,6 +1522,8 @@ export const sceneOf = (b: Bunny, word = '', seed = 0): SceneName => {
   switch (b.mood) {
     case 'sleepy':
       return 'sleep'
+    case 'boot':
+      return pick(BOOTS, seed)
     case 'working':
       return sceneForTool(b.tool)
     case 'thinking': {
