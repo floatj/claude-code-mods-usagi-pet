@@ -9,6 +9,10 @@ const TTL: Partial<Record<Mood, number>> = {
   shock: 3000,
   sad: 5000,
   love: 3000,
+  // Set pieces, each as long as its scene.
+  transform: 4800,
+  blast: 6300,
+  welcome: 3000,
 }
 
 export const INITIAL: Bunny = {
@@ -52,6 +56,9 @@ export const COLOR: Record<Mood, string | undefined> = {
   sad: 'blue',
   sleepy: undefined,
   love: 'magenta',
+  transform: 'magenta',
+  blast: 'magenta',
+  welcome: 'magenta',
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -87,5 +94,11 @@ export const captionOf = (b: Bunny): string => {
       return '睡著了'
     case 'love':
       return '♡'
+    case 'transform':
+      return '變身！'
+    case 'blast':
+      return '全力全開！'
+    case 'welcome':
+      return '歡迎回來♡'
   }
 }

@@ -7,6 +7,9 @@ export type Mood =
   | 'sad'
   | 'sleepy'
   | 'love'
+  | 'transform'
+  | 'blast'
+  | 'welcome'
 
 export type Bunny = {
   mood: Mood

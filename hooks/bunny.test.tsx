@@ -101,12 +101,13 @@ test('the pane draws the bunny and petting it shows love', async ($, on) => {
   }
 })
 
-test('the session clock moves her: slowly asleep, a frame a period once a prompt wakes her', async ($, on) => {
+test('the session clock moves her: slowly asleep, greeting you as a prompt wakes her, a blast after a long turn', async ($, on) => {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('prompt.submit', ($, e) => ({ text: e.text }))
+  on('turn.complete', () => ({ text: '' }))
   await $.session.start({ cwd: '/tmp', surface: 'terminal' } as never)
   const ui = await $.ui.mount({ plugin: 'bunny', surface: 'terminal', ...PANE })
   const drawn = async () => (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
@@ -128,6 +129,10 @@ test('the session clock moves her: slowly asleep, a frame a period once a prompt
   expect(asleep).toBeLessThan(4)
 
   await $.prompt.submit({ text: 'hi' } as never)
-  expect(await ui.find({ type: 'Text', text: /收到！/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /歡迎回來/ })).toBeDefined()
   expect(await framesOver(16)).toBeGreaterThan(asleep)
+
+  await clock.advance(120_000)
+  await $.turn.complete({ reason: 'answered', turnId: 't1' } as never)
+  expect(await ui.find({ type: 'Text', text: /全力全開/ })).toBeDefined()
 })

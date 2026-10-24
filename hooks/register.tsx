@@ -13,6 +13,11 @@ const ROWS = 12
 const SHIFT_LEFT = 3
 // Asleep she breathes slowly: her frame moves on one clock period in this many.
 const SLEEP_EVERY = 8
+// A prompt now and then sets her transforming; a turn this long ends in a blast.
+const TRANSFORM_CHANCE = 0.2
+const BLAST_AFTER_MS = 120_000
+// Set pieces a tool call does not cut short.
+const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome']
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
@@ -26,6 +31,8 @@ let seed = 0
 // Her frame clock, and the periods it has counted.
 let frames: Timer | undefined
 let period = 0
+// When the turn running began.
+let turnAt = 0
 
 const wake = ($: EngineInterface) => {
   frames ??= $.clock.every(FRAME_MS, () => void frame($))
@@ -67,7 +74,11 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     const now = await $.clock.now()
-    await update($, pet, b => ({ ...setMood(b, 'shock', now), isBusy: true, turnTick: b.tick }))
+    turnAt = now
+    // Woken, she greets you; else a start, or now and then a transformation.
+    const isAsleep = (await read($, pet)).mood === 'sleepy'
+    const mood: Mood = isAsleep ? 'welcome' : Math.random() < TRANSFORM_CHANCE ? 'transform' : 'shock'
+    await update($, pet, b => ({ ...setMood(b, mood, now), isBusy: true, turnTick: b.tick }))
     wake($)
 
     return next(e)
@@ -76,7 +87,7 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     running += 1
     const startedAt = await $.clock.now()
-    await update($, pet, b => setMood(b, 'working', startedAt, e.tool))
+    await update($, pet, b => (SHOWS.includes(b.mood) ? { ...b, tool: e.tool } : setMood(b, 'working', startedAt, e.tool)))
     wake($)
 
     try {
@@ -98,7 +109,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const now = await $.clock.now()
     await update($, pet, b => ({
-      ...setMood(b, b.mood === 'sad' ? 'sad' : 'happy', now),
+      ...setMood(b, b.mood === 'sad' ? 'sad' : now - turnAt >= BLAST_AFTER_MS ? 'blast' : 'happy', now),
       isBusy: false,
     }))
     wake($)

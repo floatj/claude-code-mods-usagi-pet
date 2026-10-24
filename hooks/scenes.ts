@@ -177,7 +177,7 @@ const isGoingRight = (t: number, span: number) => span <= 0 || t % (span * 2) < 
 type Ears = 'up' | 'left' | 'right' | 'out' | 'down'
 type Eyes = 'open' | 'left' | 'right' | 'closed' | 'happy' | 'wide' | 'heart'
 type Feet = 'sit' | 'a' | 'b' | 'tuck'
-type Arms = 'down' | 'up' | 'left' | 'right'
+type Arms = 'down' | 'up' | 'left' | 'right' | 'reach' | 'forward'
 
 // Four rows of long ears above her headband; `left` and `right` lean that ear
 // outward, `out` lets both fall apart as she dozes.
@@ -199,6 +199,9 @@ const HANDS: Record<Arms, string> = {
   up: '.t.AFFFA.t.',
   left: '.VAAFFFAVt.',
   right: '.tVAFFFAAV.',
+  // Both hands on their way up and out to her right, then pushed out: see `rabbit`.
+  reach: '.tVAFFFAAA.',
+  forward: '.tVAFFFAAAA',
 }
 const SKIRT = ['..AAFFFAA..', '.AAAFFFAAA.']
 // White stockings and blue shoes.
@@ -222,6 +225,8 @@ type Pose = {
   eyes?: Eyes
   feet?: Feet
   arms?: Arms
+  /** Her colors, for an outfit of another day. */
+  inks?: Record<string, string>
 }
 
 // What the stroll is doing this frame; a pose that leaves a part alone follows it.
@@ -261,7 +266,7 @@ const earsOf = (t: number): Ears => {
   return p === 15 || p === 16 ? 'right' : p === 29 ? 'left' : 'up'
 }
 
-const eyes = (c: Canvas, x: number, y: number, look: Eyes) => {
+const eyes = (c: Canvas, x: number, y: number, look: Eyes, inks = INKS) => {
   const shift = look === 'left' ? -1 : look === 'right' ? 1 : 0
 
   for (const at of [x + 3 + shift, x + 7 + shift]) {
@@ -279,7 +284,7 @@ const eyes = (c: Canvas, x: number, y: number, look: Eyes) => {
       dot(c, at, y + 1, INKS.H!)
     } else {
       dot(c, at, y, INKS.K!)
-      dot(c, at, y + 1, INKS.k!)
+      dot(c, at, y + 1, inks.k!)
 
       if (look === 'wide') {
         dot(c, at, y - 1, INKS.K!)
@@ -299,27 +304,38 @@ const rabbit = (s: Shot, pose: Pose = {}) => {
   const ears = pose.ears ?? earsOf(t)
   const arms = pose.arms ?? 'down'
   const feet = pose.feet ?? (lift > 0 ? 'tuck' : stroll.isMoving ? pick(['a', 'b'] as const, t) : 'sit')
+  const inks = pose.inks ?? INKS
 
   // Her dress first: a nodding head comes down over the collar.
-  paint(c, x, top + 10, [SHOULDERS, HANDS[arms], ...(isSquashed ? SQUASHED : [...SKIRT, ...LEGS[feet]])])
+  paint(c, x, top + 10, [SHOULDERS, HANDS[arms], ...(isSquashed ? SQUASHED : [...SKIRT, ...LEGS[feet]])], inks)
 
   if (!isSquashed) {
     // Lace along her hem, teeth half a pixel wide either side of the apron.
     for (const dx of [1, 2, 3]) {
-      split(c, x + dx, top + 13, INKS.A!, INKS.F!)
-      split(c, x + 10 - dx, top + 13, INKS.F!, INKS.A!)
+      split(c, x + dx, top + 13, inks.A!, inks.F!)
+      split(c, x + 10 - dx, top + 13, inks.F!, inks.A!)
     }
   }
 
   if (arms === 'up') {
-    paint(c, x, top + 8, ['V.........V', 'V.........V'])
+    paint(c, x, top + 8, ['V.........V', 'V.........V'], inks)
+  }
+
+  if (arms === 'reach') {
+    // Both arms coming up, the gloves a row below where they will push out.
+    paint(c, x + 10, top + 11, ['V', 'V'], inks)
+  }
+
+  if (arms === 'forward') {
+    // The other arm along the first, both gloves out past her side.
+    paint(c, x + 10, top + 10, ['AV', '.V'], inks)
   }
 
   if (ears !== 'down') {
-    paint(c, x, head, EARS[ears])
+    paint(c, x, head, EARS[ears], inks)
   }
 
-  paint(c, x, head + 4, HEAD)
+  paint(c, x, head + 4, HEAD, inks)
 
   // White diamond earrings on the shadowed hair beside her cheeks; lop ears or a carrot cover them.
   for (const at of [x + 1, x + 9]) {
@@ -330,10 +346,10 @@ const rabbit = (s: Shot, pose: Pose = {}) => {
     }
   }
 
-  eyes(c, x, head + 7, pose.eyes ?? faceOf(s))
+  eyes(c, x, head + 7, pose.eyes ?? faceOf(s), inks)
 
   if (ears === 'down') {
-    paint(c, x, head + 4, LOP)
+    paint(c, x, head + 4, LOP, inks)
   }
 }
 
@@ -460,7 +476,311 @@ type Scene = {
 // Hopping along: up, over, down, land.
 const HOP = [0, 1, 2, 1] as const
 
+// ---- Set pieces ----
+
+/** Whitens every pixel already painted in her columns from row `from` up to `to`: her silhouette in a burst of light. */
+const bleach = (c: Canvas, x: number, from: number, to: number) => {
+  for (let y = from; y < to; y += 1) {
+    const line = c.px[y + SKY * 2]
+    const worn = c.glyphs[Math.floor(y / 2) + SKY]
+
+    for (let at = Math.max(0, x); at < Math.min(c.width, x + SPRITE); at += 1) {
+      if (line?.[at] !== undefined) {
+        line[at] = '#ffffff'
+        c.halves[y + SKY * 2]![at] = undefined
+      }
+
+      if (worn?.[at]?.isWorn) {
+        worn[at] = undefined
+      }
+    }
+  }
+}
+
+// Two ribbons, pink and blue, a few pixels long, circling her.
+const RIBBONS = ['#ff8fc8', '#7fc8ff']
+
+const ribbons = (c: Canvas, x: number, y: number, t: number, radius = 6) => {
+  RIBBONS.forEach((color, i) => {
+    for (let k = 0; k < 4; k += 1) {
+      const angle = t * 0.7 - k * 0.35 + i * Math.PI
+      dot(c, x + 5 + Math.round(Math.cos(angle) * radius), y + Math.round(Math.sin(angle) * (radius + 1)), color)
+    }
+  })
+}
+
+/** Wraps ribbon about her at rows `band - 2` to `band`: stripes running round her, loops out at her side. */
+const wrap = (c: Canvas, x: number, band: number, t: number) => {
+  for (let y = band - 2; y <= band; y += 1) {
+    for (let at = x; at < x + SPRITE; at += 1) {
+      dot(c, at, y, (at + y + t) % 4 < 2 ? RIBBONS[0]! : RIBBONS[1]!)
+    }
+  }
+
+  // Its loose ends, fluttering.
+  dot(c, x + SPRITE, band - 1 - (t % 2), RIBBONS[0]!)
+  dot(c, x + SPRITE + 1, band - 2 + (t % 2), RIBBONS[1]!)
+}
+
+/** Her maid's colors above row `from`, over a figure drawn in other colors below it. */
+const above = (s: Shot, pose: Pose, from: number) => {
+  const maid = canvasOf(s.c.width)
+  rabbit({ ...s, c: maid }, pose)
+
+  for (let y = -SKY * 2; y < from; y += 1) {
+    s.c.px[y + SKY * 2] = [...maid.px[y + SKY * 2]!]
+    s.c.halves[y + SKY * 2] = [...maid.halves[y + SKY * 2]!]
+  }
+}
+
+// Her magical girl's colors: hair of pink and lilac, a rose dress with gold, white gloves.
+const MAGICAL = {
+  ...INKS,
+  T: '#ffc8e6',
+  t: '#d98fc4',
+  A: '#ff5fae',
+  a: '#ffcf3f',
+  V: '#ffffff',
+  k: '#ff5fa8',
+}
+
+// Where the sparkles of her pose land, in turn.
+const BURST: readonly (readonly [number, number, string, string])[] = [
+  [18, 0, '✦', YELLOW],
+  [17, 3, '♡', PINK],
+  [19, 1, '✧', MAGENTA],
+  [18, 5, '♡', MAGENTA],
+  [13, 6, '✦', YELLOW],
+  [19, 6, '✧', PINK],
+]
+
+// Her wands, each from her raised right hand up and out, drawn from column 10 and
+// the given row below the top of her sprite; `g` glints. One is hers each time.
+const WANDS: readonly { dy: number; rows: readonly string[]; inks: Record<string, string> }[] = [
+  // A carrot, its leaves at the top.
+  { dy: 2, rows: ['.....GG', '....GG.', '...OO..', '..Oo...', '.oO....', '.O.....'], inks: { ...INKS, G: GREEN } },
+  // A little rabbit's head, its nose a gem, on a pink stick.
+  { dy: 1, rows: ['...F.F.', '...P.P.', '...F.F.', '..FFFFF', '..FKFKF', '..FFgFF', '.A.....'], inks: MAGICAL },
+  // A leek, as a certain singer carries: white where she holds it, its leaves split at the top.
+  {
+    dy: 0,
+    rows: ['......G.G', '......GG.', '.....GG..', '....eG...', '...We....', '..WW.....', '.WW......', 'W........'],
+    inks: { ...INKS, G: '#4cbf5a', e: '#b8f0a0', W: '#ffffff' },
+  },
+]
+
+const BEAM = '#ff6fd8'
+const GLOW = '#ff9fe8'
+// The beam's middle, between the rows of her pushed-out hands; how far it spreads
+// either side, and how fast with distance.
+const BEAM_AXIS = 10.5
+const BEAM_HALF = 5
+const BEAM_SPREAD = 0.3
+// Its rim's colors as it shimmers.
+const RIM = ['#ff6fd8', '#c77dff', '#7fc8ff', '#ff9fe8']
+// Its frames: fired, at full power from the third until FULL, half until HALF, a thread until SPENT.
+const FULL = 27
+const HALF = 30
+const SPENT = 32
+const HEART = ['.H.H.', 'HHHHH', 'HHHHH', '.HHH.', '..H..']
+
 const SCENES = {
+  // A magical girl's transformation: she leaps with a star raised, flashes with
+  // light bursting from her, ribbons circle and close in, then wind up her from
+  // her shoes, dressing her anew where they pass; a last flash, and she lands in
+  // a pose with her wand.
+  transform: {
+    draw: s => {
+      const { c } = s
+      const p = s.since
+
+      if (p < 4) {
+        const lift = pick([0, 1, 2, 2], p)
+        rabbit(s, { arms: 'up', eyes: 'wide', ears: 'up', lift, isSquashed: false })
+        write(c, 10, 2 - Math.floor(lift / 2), '✦', p % 2 ? '#ffffff' : YELLOW)
+
+        return
+      }
+
+      const floating = { arms: 'up', eyes: 'closed', ears: 'up', lift: 2, isSquashed: false } as const
+
+      if (p < 7) {
+        rabbit(s, floating)
+
+        if (p % 2 === 0) {
+          bleach(c, 0, -2, FLOOR)
+        }
+
+        // A ring of light, swelling.
+        for (let k = 0; k < 10; k += 1) {
+          const angle = (k * Math.PI) / 5 + p * 0.2
+          const r = (p - 4) * 2 + 4
+          dot(c, 5 + Math.round(Math.cos(angle) * r), 6 + Math.round(Math.sin(angle) * r * 0.9), k % 2 ? '#fff3b0' : PINK)
+        }
+
+        return
+      }
+
+      if (p < 10) {
+        rabbit(s, floating)
+        ribbons(c, 0, 6, p, 8 - (p - 7) * 2)
+
+        return
+      }
+
+      if (p < 22) {
+        // Wound from her shoes to her ears in twelve frames, dressed anew below.
+        const band = FLOOR - 2 - Math.round(((p - 10) * 18) / 11)
+        rabbit(s, { ...floating, inks: MAGICAL })
+        above(s, floating, band - 2)
+        wrap(c, 0, band, p)
+        write(c, pick([1, 9, 4, 7], p), Math.floor((band + 2) / 2) + 1, '✧', YELLOW)
+
+        return
+      }
+
+      if (p === 22) {
+        rabbit(s, { ...floating, inks: MAGICAL })
+        bleach(c, 0, -2, FLOOR)
+
+        return
+      }
+
+      // Landed, a gem on her headband and her wand held high, its gem glinting.
+      const top = FLOOR - SPRITE_ROWS + (p === 23 ? 1 : 0)
+      rabbit(s, { arms: 'up', eyes: 'happy', ears: p % 4 < 2 ? 'up' : 'out', lift: 0, isSquashed: p === 23, inks: MAGICAL })
+      dot(c, 5, top + 4, MAGICAL.a)
+      // The same wand all through one transformation: chosen by the frame it began on.
+      const wand = pick(WANDS, s.t - s.since)
+      paint(c, 10, top + wand.dy, wand.rows, { ...wand.inks, g: p % 2 ? '#ffffff' : '#ff4d8d' })
+      write(c, 17, Math.floor((top + 1) / 2), p % 4 < 2 ? '✧' : ' ', '#ffffff')
+
+      for (let i = 0; i <= Math.min(BURST.length - 1, p - 23); i += 1) {
+        const [x, row, ch, color] = BURST[(i + p) % BURST.length]!
+        write(c, x, row, ch, color)
+      }
+    },
+  },
+
+  // Full power: her hands raised and pushed out, a charge gathered before them
+  // with her body shaking, a beam across the stage that pushes her back, and smoke.
+  blast: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+
+      if (p < 10) {
+        const x = p >= 6 && p % 2 ? 2 : 1
+        const muzzle = x + SPRITE + 1
+        // Her hands come up, one and then both, and push out.
+        const arms = pick(['down', 'right', 'reach', 'forward'] as const, Math.min(p, 3))
+        rabbit(s, { x, arms, eyes: 'wide', ears: 'up', lift: 0, isSquashed: false })
+
+        // Light drawn in from the right, closing on her hands.
+        for (let k = 0; k < 4; k += 1) {
+          const at = muzzle + Math.max(1, (10 - p) * 2 - k)
+          dot(c, at + k * 2, pick([8, 13, 9, 12], k), k % 2 ? GLOW : CYAN)
+        }
+
+        // The charge, growing.
+        const size = p < 3 ? 0 : p < 6 ? 1 : 2
+        for (let dy = -size; dy <= size; dy += 1) {
+          for (let dx = -size; dx <= size; dx += 1) {
+            if (Math.abs(dx) + Math.abs(dy) <= size + (size > 1 ? 1 : 0)) {
+              dot(c, muzzle + dx + size, 11 + dy, Math.abs(dx) + Math.abs(dy) <= size - 1 ? '#ffffff' : BEAM)
+            }
+          }
+        }
+
+        if (p >= 4) {
+          // A ring about it, turning.
+          for (let k = 0; k < 4; k += 1) {
+            const angle = p * 0.8 + (k * Math.PI) / 2
+            dot(c, muzzle + size + Math.round(Math.cos(angle) * (size + 2)), 11 + Math.round(Math.sin(angle) * (size + 2)), YELLOW)
+          }
+        }
+
+        return
+      }
+
+      if (p < SPENT) {
+        // Pushed back as it fires, then braced, shaking with it at full power.
+        const x = p < 12 ? 0 : p < FULL ? 1 + (p % 2) : 1
+        const muzzle = x + SPRITE + 1
+        rabbit(s, { x, arms: 'forward', eyes: p < 12 ? 'closed' : 'wide', ears: 'left', lift: 0, isSquashed: false })
+        // A cone from her hands, widening across the stage: thin as it fires, full
+        // in three frames, then fading to a thread.
+        const swell = Math.min(1, (p - 9) / 3) * (p < FULL ? 1 : p < HALF ? 0.45 : 0.2)
+        const isFull = p >= 12 && p < FULL
+
+        for (let at = muzzle; at < width; at += 1) {
+          const half = Math.max(0.5, Math.min(BEAM_HALF, 1 + (at - muzzle) * BEAM_SPREAD) * swell)
+          // Rings of light running out along it, and its core pulsing.
+          const isRing = isFull && (at - muzzle - p * 2) % 5 === 0
+          const core = isFull ? (p % 2 ? 0.55 : 0.35) : 0.45
+
+          for (let y = Math.ceil(BEAM_AXIS - half); y <= Math.floor(BEAM_AXIS + half); y += 1) {
+            const off = Math.abs(y - BEAM_AXIS) / half
+            const rim = isFull ? pick(RIM, p + at) : (p + at) % 2 ? BEAM : GLOW
+            dot(c, at, y, off < core || (isRing && off < 0.8) ? '#ffffff' : off < 0.8 ? GLOW : rim)
+          }
+
+          // Sparks thrown off its edges.
+          if (isFull && (at * 7 + p * 3) % 6 === 0) {
+            const side = (at + p) % 2 ? 1 : -1
+            dot(c, at, Math.round(BEAM_AXIS + side * (half + 1 + ((at + p) % 2))), (at + p) % 3 ? YELLOW : '#ffffff')
+          }
+        }
+
+        if (p === 10) {
+          // The flash as it fires: the whole stage lit pink behind her.
+          for (const line of c.px) {
+            for (let at = 0; at < width; at += 1) {
+              line[at] ??= '#ffd6f0'
+            }
+          }
+        }
+
+        return
+      }
+
+      rabbit(s, { x: 1, eyes: 'happy', ears: 'up', lift: 0, isSquashed: false })
+      // Smoke where it struck, drifting up.
+      const rise = Math.floor((p - SPENT) / 2)
+      write(c, width - 3, 5 - rise, '∘', GRAY)
+      write(c, width - 2, 4 - rise, '○', GRAY)
+      write(c, width - 4, 3 - rise, '∘', GRAY)
+    },
+  },
+
+  // Woken: a jump with her hands up, a curtsy holding out her skirt, and a heart rising beside her.
+  welcome: {
+    draw: s => {
+      const { c } = s
+      const p = s.since
+
+      if (p < 4) {
+        rabbit(s, { lift: pick([1, 2, 2, 1], p), arms: 'up', eyes: 'wide', ears: 'up', feet: 'tuck', isSquashed: false })
+        write(c, SPRITE, 0, '!', YELLOW)
+
+        return
+      }
+
+      if (p < 13) {
+        rabbit(s, { lift: 0, isSquashed: true, nod: 1, eyes: 'happy', ears: 'out' })
+        // Her skirt held out at both sides, its corners lifted now and then.
+        const hands = FLOOR - SPRITE_ROWS + 1 + 11
+        paint(c, 0, hands, p % 4 < 2 ? ['.tAAFFFAAt.', 'VAAAFFFAAAV'] : ['VtAAFFFAAtV', 'AAAAFFFAAAA'])
+
+        return
+      }
+
+      rabbit(s, { lift: 0, isSquashed: false, eyes: 'happy', ears: 'up' })
+      paint(c, SPRITE + 1, Math.max(0, 9 - (p - 13)), HEART)
+    },
+  },
+
   sleep: {
     isWide: true,
     draw: s => {
