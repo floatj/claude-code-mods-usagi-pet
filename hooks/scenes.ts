@@ -1143,6 +1143,50 @@ const SCENES = {
 export type SceneName = keyof typeof SCENES
 export const SCENE_NAMES = Object.keys(SCENES) as SceneName[]
 
+// Every scene in turn, for the play-all button: each everyday one for three
+// seconds, the set pieces whole, the blast last.
+const EVERYDAY = 20
+export const REEL: readonly { scene: SceneName; label: string; frames: number }[] = [
+  { scene: 'idle', label: '發呆', frames: EVERYDAY },
+  { scene: 'think', label: '思考', frames: EVERYDAY },
+  { scene: 'type', label: '打字', frames: EVERYDAY },
+  { scene: 'read', label: '看書', frames: EVERYDAY },
+  { scene: 'write', label: '寫字', frames: EVERYDAY },
+  { scene: 'web', label: '上網', frames: EVERYDAY },
+  { scene: 'dig', label: '挖洞', frames: EVERYDAY },
+  { scene: 'herd', label: '帶小兔子', frames: EVERYDAY },
+  { scene: 'magic', label: '魔法', frames: EVERYDAY },
+  { scene: 'juggle', label: '拋接', frames: EVERYDAY },
+  { scene: 'carrot', label: '吃紅蘿蔔', frames: EVERYDAY },
+  { scene: 'cook', label: '煮東西', frames: EVERYDAY },
+  { scene: 'grow', label: '種花', frames: EVERYDAY },
+  { scene: 'dance', label: '跳舞', frames: EVERYDAY },
+  { scene: 'walk', label: '散步', frames: EVERYDAY },
+  { scene: 'shock', label: '收到', frames: EVERYDAY },
+  { scene: 'happy', label: '開心', frames: EVERYDAY },
+  { scene: 'sad', label: '難過', frames: EVERYDAY },
+  { scene: 'love', label: '被摸', frames: EVERYDAY },
+  { scene: 'sleep', label: '睡覺', frames: EVERYDAY },
+  { scene: 'welcome', label: '歡迎回來', frames: 21 },
+  { scene: 'transform', label: '變身', frames: 32 },
+  { scene: 'blast', label: '全力全開', frames: 42 },
+]
+
+/** Where the reel is `frame` frames in: its entry, which, and how far into it; past its end, nothing. */
+export const reelAt = (frame: number) => {
+  let start = 0
+
+  for (const [index, one] of REEL.entries()) {
+    if (frame < start + one.frames) {
+      return { ...one, index, since: frame - start }
+    }
+
+    start += one.frames
+  }
+
+  return undefined
+}
+
 // ---- Which scene plays when ----
 
 // A running tool's scene, by tool name; any other tool is typed at the laptop.

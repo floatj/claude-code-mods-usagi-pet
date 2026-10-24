@@ -3,7 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Mood } from '../types'
 import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
-import { FRAME_MS, frameRows, MAX_STAGE, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { FRAME_MS, frameRows, MAX_STAGE, REEL, reelAt, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = 'bunny'
 const TITLE = '兔兔'
@@ -33,6 +33,8 @@ let frames: Timer | undefined
 let period = 0
 // When the turn running began.
 let turnAt = 0
+// The frame the play-all reel started on, while it runs.
+let reelFrom: number | undefined
 
 const wake = ($: EngineInterface) => {
   frames ??= $.clock.every(FRAME_MS, () => void frame($))
@@ -41,7 +43,7 @@ const wake = ($: EngineInterface) => {
 const frame = async ($: EngineInterface) => {
   period += 1
 
-  if ((await read($, pet)).mood === 'sleepy' && period % SLEEP_EVERY !== 0) {
+  if (reelFrom === undefined && (await read($, pet)).mood === 'sleepy' && period % SLEEP_EVERY !== 0) {
     return
   }
 
@@ -131,8 +133,14 @@ export const register: Register = on => {
     // A rabbit kept from before a reload may lack what was added since.
     const b = { ...INITIAL, ...(await read($, pet)) }
     const width = Math.max(1, Math.min(bodyColumns, MAX_STAGE))
-    const stage = frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick, skyAt(await $.clock.now()))
-    const color = COLOR[b.mood]
+    const sky = skyAt(await $.clock.now())
+    // The reel, while it runs, plays in place of what she is doing; past its end it stops.
+    const reel = reelFrom === undefined ? undefined : reelAt(b.tick - reelFrom)
+    reelFrom = reel === undefined ? undefined : reelFrom
+    const stage = reel
+      ? frameRows(reel.scene, b.tick, width, reel.since, sky)
+      : frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick, sky)
+    const color = reel ? 'magenta' : COLOR[b.mood]
 
     return (
       <Box
@@ -157,21 +165,34 @@ export const register: Register = on => {
           ))}
         </Box>
         <Text key="caption" color={color}>
-          {captionOf(b)}
+          {reel ? `▶ ${reel.index + 1}/${REEL.length} ${reel.label}` : captionOf(b)}
         </Text>
-        <Button
-          key="pet"
-          label="♡"
-          hotkey="p"
-          onPress={async () => {
-            const now = await $.clock.now()
-            await update($, pet, one => ({
-              ...setMood(one, 'love', now),
-              pets: one.pets + 1,
-            }))
-            wake($)
-          }}
-        />
+        <Box gap={1}>
+          <Button
+            key="pet"
+            label="♡"
+            hotkey="p"
+            onPress={async () => {
+              const now = await $.clock.now()
+              await update($, pet, one => ({
+                ...setMood(one, 'love', now),
+                pets: one.pets + 1,
+              }))
+              wake($)
+            }}
+          />
+          <Button
+            key="reel"
+            label={reel ? '■' : '▶'}
+            hotkey="r"
+            onPress={async () => {
+              // Play every scene from the first, or stop the one playing.
+              reelFrom = reelFrom === undefined ? (await read($, pet)).tick : undefined
+              await update($, pet, one => ({ ...one }))
+              wake($)
+            }}
+          />
+        </Box>
         {b.pets > 0 && <Text dimColor>♡ × {b.pets}</Text>}
         </Box>
       </Box>

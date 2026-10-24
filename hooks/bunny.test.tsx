@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { INITIAL, setMood, SLEEP_AFTER_MS, step } from './bunny'
-import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { ACT_FRAMES, FRAME_MS, frameRows, MAX_STAGE, REEL, SCENE_NAMES, sceneForTool, sceneForWord, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 
 const PANE = {
   component: 'Pane',
@@ -135,4 +135,21 @@ test('the session clock moves her: slowly asleep, greeting you as a prompt wakes
   await clock.advance(120_000)
   await $.turn.complete({ reason: 'answered', turnId: 't1' } as never)
   expect(await ui.find({ type: 'Text', text: /全力全開/ })).toBeDefined()
+})
+
+test('the play-all button plays every scene in turn, and stops when pressed again', async ($, on) => {
+  const clock = mock.clock(on)
+  expect(REEL.map(one => one.scene).sort()).toEqual([...SCENE_NAMES].sort())
+  const ui = await $.ui.mount({ plugin: 'bunny', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'reel' })
+  expect(await ui.find({ type: 'Text', text: /▶ 1\/\d+ 發呆/ })).toBeDefined()
+
+  for (let at = 0; at < 20; at += 1) {
+    await clock.advance(FRAME_MS)
+  }
+
+  expect(await ui.find({ type: 'Text', text: /▶ 2\/\d+ 思考/ })).toBeDefined()
+  await ui.press({ key: 'reel' })
+  expect(await ui.find({ type: 'Text', text: /▶ \d+\// })).toBeUndefined()
+  await ui.unmount()
 })
