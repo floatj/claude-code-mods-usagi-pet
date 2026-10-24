@@ -94,6 +94,8 @@ test('the scene follows her mood, the running tool, the spinner word and a long 
   expect(sceneForWord('Sautéing')).toBe('cook')
   expect(sceneForWord('Moseying')).toBe('walk')
   expect(sceneForWord('Vibing')).toBe('miku')
+  expect(sceneForWord('Processing')).toBeUndefined()
+  expect(sceneForWord('Musing')).toBeUndefined()
   expect(sceneForWord('Dancing')).toBe('dance')
   expect(sceneForWord('Thinking')).toBeUndefined()
 

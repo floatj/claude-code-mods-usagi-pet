@@ -1938,7 +1938,8 @@ const WORD_SCENES: readonly (readonly [RegExp, SceneName])[] = [
   [/sprout|germinat|grow|bloom|cultivat|pollinat|photosynth|propagat|unfurl|hatch|incubat/, 'grow'],
   [/burrow|spelunk|dig|excavat|forag|rummag/, 'dig'],
   [/nibbl|munch|chew|snack|noodl|digest|savor/, 'carrot'],
-  [/vib|groov|jam|bebop|harmoni|serenad|sing|croon|whistl|hum/, 'miku'],
+  // Only a word that starts so: "sing" inside Processing is no song.
+  [/^(vib|groov|jam|bebop|harmoni|serenad|sing|croon|whistl|humm)/, 'miku'],
   [/boogi|danc|jitterbug|shimm|frolic/, 'dance'],
   [/juggl|shuffl|wrangl|herd|orchestrat/, 'juggle'],
   [/conjur|manifest|transmut|enchant|alchem|metamorph|crystalli|levitat/, 'magic'],
