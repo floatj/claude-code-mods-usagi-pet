@@ -732,6 +732,32 @@ const MIMIC_INKS = {
 const MIKU = { ...INKS, T: '#39c5bb', t: '#1f8f88', A: '#3a3f4a', a: '#39c5bb', F: '#d8dce2', V: '#3a3f4a', k: '#39c5bb' }
 const AQUA = { ...INKS, T: '#8fd0ff', t: '#4a9ad8', A: '#3a7fd8', a: '#8fd0ff', V: '#ffffff' }
 const LEEK = WANDS[2]!
+// A certain knight king's: golden hair, a blue dress, silver armour on her chest
+// and shoulders.
+const SABER = { ...INKS, T: '#f5d36a', t: '#c9a23a', A: '#3a5fc8', a: '#2a3f8f', k: '#3fa58a', E: '#c8ccd6' }
+// Her sword: a blade of gold and pale light, a gold guard with a blue gem, a dark blue grip.
+const SWORD = { G: '#fff3b0', g: '#ffd75f', Y: '#ffd75f', b: '#3a5fc8', h: '#2a3f8f' }
+// The wind that hides it, and the light of its stroke from core to rim.
+const WIND = ['#e6f6ff', '#9fd8ff', '#ffffff']
+const RADIANCE = ['#fff3b0', '#ffd75f', '#ffb347']
+// Her frames: wind about it until UNVEIL, the blade shown by RAISED, the stroke at
+// SWING, the light over the ground until SHEATHED, her supper from SUPPER, and
+// from SECONDS the empty plate held up for more.
+const UNVEIL = 8
+const RAISED = 14
+const SWING = 22
+const SHEATHED = 36
+const SUPPER = 40
+const SECONDS = 52
+// A plate of curry and rice going down a spoonful at a time, and the plate empty.
+const CURRIES = [
+  ['..ccWW..', '.cccWWW.'],
+  ['...cW...', '.cccWWW.'],
+  ['........', '..ccWW..'],
+  ['........', '...cW...'],
+]
+const PLATE = ['pppppppp', '.ssssss.']
+const CURRY_INKS = { c: '#c8761e', W: '#ffffff', p: '#e8eef5', s: '#8a9096' }
 
 // Her dressed as the clown, 15 wide and the stage's full 18 tall, in three poses.
 const CLOWN_W = 15
@@ -1052,6 +1078,132 @@ const SCENES = {
         for (let dx = -pool; dx <= SPRITE + pool - 1; dx += 1) dot(c, x0 + dx, 15, (dx + p) % 2 ? water : '#8fd0ff')
         write(c, x0 + SPRITE + 3, 2, 'T_T', p % 2 ? '#ffffff' : '#8fd0ff')
       }
+    },
+  },
+
+  // Dressed as a certain knight king, her sword held up at her side, hidden in a
+  // whirl of wind; the wind flies off and the golden blade shows, light gathers
+  // to it, "EX-"; she brings it down, a wave of light runs out along the ground,
+  // "CALIBUR!"; she plants it, sits down to a plate of curry, eats it all and
+  // holds the plate up for more.
+  excalibur: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x = 1
+      const isEating = p >= SUPPER
+      const arms = p < SWING || (p >= SHEATHED && !isEating) ? 'right' : 'forward'
+      rabbit(s, { x, lift: 0, isSquashed: isEating, eyes: isEating ? 'happy' : p >= SWING && p < SHEATHED ? 'wide' : 'open', ears: p >= UNVEIL && p < RAISED ? 'out' : 'up', arms: p >= SECONDS ? 'up' : arms, inks: SABER })
+      const top = FLOOR - SPRITE_ROWS + (isEating ? 1 : 0)
+      // Silver on her shoulders and chest, and a blue dress where the apron was.
+      paint(c, x + 2, top + 10, ['E.....E', '..EEE..'], SABER)
+      if (!isEating) paint(c, x + 4, top + 12, ['AAA', 'AAA'], SABER)
+      // The one lock of hair that will not lie down, blown upright by the wind.
+      const lock = p >= UNVEIL && p < RAISED ? 0 : pick([0, 1], Math.floor(p / 3))
+      dot(c, x + 5 + lock, top + 3, SABER.T)
+      dot(c, x + 5, top + 2 + (p >= SHEATHED && p < SUPPER && p % 2 ? 1 : 0), SABER.T)
+
+      if (p < SWING) {
+        // Held up at her side: the grip in her glove, the guard, the blade straight up.
+        const hilt = x + 11
+        dot(c, x + 10, top + 11, SABER.V)
+        paint(c, hilt, top + 10, ['h', 'h'], SWORD)
+        paint(c, hilt - 1, top + 9, ['YbY'], SWORD)
+        // Shown from the guard up, a pixel a frame once the wind is gone.
+        const shown = p < UNVEIL ? 0 : Math.min(10, (p - UNVEIL + 1) * 2)
+        for (let k = 1; k <= shown; k += 1) dot(c, hilt, top + 9 - k, k % 3 ? SWORD.G : SWORD.g)
+
+        if (p < RAISED) {
+          // The wind, two strands twisting up where the blade is; then blown off it.
+          const reach = p < UNVEIL ? 1 : 1 + (p - UNVEIL + 1) * 1.5
+          for (let y = top - 1; y < top + 9; y += 1) {
+            for (const strand of [0, Math.PI]) {
+              const off = Math.sin(y * 0.8 - p * 1.1 + strand)
+              if (p < UNVEIL || (y + p) % 2) dot(c, hilt + Math.round(off * (reach + 0.5)), y, pick(WIND, y + (strand ? 1 : 0)))
+            }
+          }
+        } else {
+          // Light drawn in to its point, closing from either side.
+          for (let k = 0; k < 6; k += 1) {
+            const far = Math.max(1, (SWING - p) - (k % 3))
+            const side = k % 2 ? 1 : -1
+            dot(c, hilt + side * far, top - 1 + Math.floor(k / 2) * 2 - (k % 2), pick(RADIANCE, k + p))
+          }
+          write(c, hilt + 2, -1, 'EX-'.slice(0, Math.min(3, Math.floor((p - RAISED) / 2) + 1)), YELLOW)
+        }
+
+        return
+      }
+
+      if (p < SWING + 4) {
+        // The stroke: the blade swept from upright down to her front, a trail behind it.
+        const pivot = { x: x + 11, y: top + 11 }
+        const angleAt = (q: number) => (Math.PI / 180) * pick([20, 55, 95, 120], q)
+        const q = p - SWING
+        // The trail: an arc of light behind its point, from where it was swung.
+        for (let a = angleAt(0) - 0.2; a < angleAt(q); a += 0.08) {
+          for (const k of [9, 10]) dot(c, pivot.x + Math.round(Math.sin(a) * k), pivot.y - Math.round(Math.cos(a) * k), k === 10 ? RADIANCE[2]! : RADIANCE[1]!)
+        }
+        const angle = angleAt(q)
+        for (let k = 2; k <= 10; k += 1) {
+          dot(c, pivot.x + Math.round(Math.sin(angle) * k), pivot.y - Math.round(Math.cos(angle) * k), k % 3 ? SWORD.G : SWORD.g)
+        }
+        write(c, x + 13, -1, 'EX-', YELLOW)
+        return
+      }
+
+      if (p < SHEATHED) {
+        // The blade held low before her, and the light running out along the ground
+        // from her feet: a wall of it at its front, a glow behind, then fading.
+        paint(c, x + 11, top + 11, ['hYgGgGgG'], SWORD)
+        const front = x + 12 + (p - SWING - 4) * 4
+        const fade = p < SHEATHED - 3 ? 1 : (SHEATHED - p) / 4
+
+        for (let at = x + 12; at < Math.min(width, front + 1); at += 1) {
+          const behind = front - at
+          const tall = Math.round((behind < 3 ? 13 - behind * 2 : Math.max(3, 7 - behind / 3)) * fade)
+
+          for (let k = 0; k < tall; k += 1) {
+            dot(c, at, FLOOR - 1 - k, k >= tall - 1 ? RADIANCE[2]! : k >= tall - 3 ? RADIANCE[1]! : RADIANCE[0]!)
+          }
+
+          // Motes thrown up from it.
+          if ((at * 5 + p * 3) % 7 === 0) dot(c, at, FLOOR - 2 - tall - ((at + p) % 3), (at + p) % 2 ? YELLOW : '#ffffff')
+        }
+
+        write(c, x + 13, -1, 'EX-', YELLOW)
+        if (front >= x + 20) write(c, x + 13, 0, 'CALIBUR!', p % 2 ? YELLOW : '#ffffff')
+        return
+      }
+
+      // The light drifting up as motes; her sword planted, point down beside her.
+      const sword = x + 13
+      if (!isEating) {
+        paint(c, sword, top + 9, ['h', 'h', 'Y', 'G', 'g', 'G', 'G'], SWORD)
+        paint(c, sword - 1, top + 11, ['Y.Y'], SWORD)
+        for (let k = 0; k < 6; k += 1) {
+          dot(c, x + 15 + ((k * 4) % 12), 12 - (p - SHEATHED) * 2 - (k % 3) * 2, pick(RADIANCE, k))
+        }
+        return
+      }
+
+      const plate = x + SPRITE + 1
+
+      if (p >= SECONDS) {
+        // All gone: the empty plate held up high, for more.
+        paint(c, x + 10, top + 6 - (p % 2), PLATE, CURRY_INKS)
+        write(c, x + 13, 1, 'MORE!', p % 2 ? YELLOW : '#ffffff')
+        return
+      }
+
+      // Supper: a plate of curry before her, steam, and spoonfuls on their way up
+      // until it is gone.
+      const eaten = Math.min(CURRIES.length - 1, Math.floor(((p - SUPPER) * CURRIES.length) / (SECONDS - SUPPER)))
+      paint(c, plate, FLOOR - 4, [...CURRIES[eaten]!, ...PLATE], CURRY_INKS)
+      write(c, plate + 2, 4 - ((p - SUPPER) % 2), '~', '#ffffff')
+      dot(c, x + 10, top + (p % 2 ? 9 : 12), GRAY)
+      write(c, x + 5, -1, p < SUPPER + 2 ? '!?' : '♪', YELLOW)
     },
   },
 
@@ -1898,6 +2050,7 @@ export const REEL: readonly { scene: SceneName; label: string; frames: number }[
   { scene: 'ranranru', label: '藍藍路', frames: 28 },
   { scene: 'miku', label: '初音 cosplay', frames: 28 },
   { scene: 'aqua', label: '阿克婭 cosplay', frames: 32 },
+  { scene: 'excalibur', label: 'EX咖哩棒', frames: 56 },
   { scene: 'transform', label: '變身', frames: 32 },
   { scene: 'blast', label: '全力全開', frames: 42 },
 ]

@@ -21,20 +21,28 @@ const TRANSFORM_CHANCE = 0.2
 const WAKE_TRANSFORM_CHANCE = 0.25
 const BLAST_AFTER_MS = 120_000
 // Set pieces a tool call does not cut short.
-const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua']
+const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua', 'excalibur']
 // Now and then an edit brings the shapeshifter; a failure, the goddess or the
-// ghost in its disguise; a finished turn, the clown's chant.
+// ghost in its disguise; a finished turn, the clown's chant or the knight's sword.
 const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/
 const DITTO_CHANCE = 0.05
 const AQUA_CHANCE = 0.1
 const MIMIKYU_CHANCE = 0.07
 const RANRANRU_CHANCE = 0.07
+const EXCALIBUR_CHANCE = 0.07
 
 /** What a failed tool brings on: her sorrow, or now and then a parody of it. */
 const failure = (): Mood => {
   const roll = Math.random()
 
   return roll < AQUA_CHANCE ? 'aqua' : roll < AQUA_CHANCE + MIMIKYU_CHANCE ? 'mimikyu' : 'sad'
+}
+
+/** What a finished turn brings on: her joy, or now and then a parody. */
+const finale = (): Mood => {
+  const roll = Math.random()
+
+  return roll < RANRANRU_CHANCE ? 'ranranru' : roll < RANRANRU_CHANCE + EXCALIBUR_CHANCE ? 'excalibur' : 'happy'
 }
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
@@ -170,10 +178,10 @@ export const register: Register = on => {
     const now = await $.clock.now()
     await update($, pet, b => ({
       // A sorrow or a set piece still playing stays; else a blast after a long turn,
-      // now and then the clown's chant, and otherwise her joy.
+      // now and then a parody, and otherwise her joy.
       ...(b.mood === 'sad' || SHOWS.includes(b.mood)
         ? b
-        : setMood(b, now - turnAt >= BLAST_AFTER_MS ? 'blast' : Math.random() < RANRANRU_CHANCE ? 'ranranru' : 'happy', now)),
+        : setMood(b, now - turnAt >= BLAST_AFTER_MS ? 'blast' : finale(), now)),
       isBusy: false,
     }))
     wake($)
