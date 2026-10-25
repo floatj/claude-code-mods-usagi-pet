@@ -122,7 +122,7 @@ test('the pane draws the bunny and petting it shows love', async ($, on) => {
   }
 })
 
-test('the session clock moves her: booted up, slowly asleep, greeting you or transforming as a prompt wakes her, a blast after a long turn', async ($, on) => {
+test('the session clock moves her: booted up, slowly asleep, greeting you or transforming as a prompt wakes her, a blast or the buster after a long turn', async ($, on) => {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -158,7 +158,8 @@ test('the session clock moves her: booted up, slowly asleep, greeting you or tra
 
   await clock.advance(120_000)
   await $.turn.complete({ reason: 'answered', turnId: 't1' } as never)
-  expect(await ui.find({ type: 'Text', text: /全力全開/ })).toBeDefined()
+  // A blast, or half the time the buster, which opens on READY.
+  expect(await ui.find({ type: 'Text', text: /全力全開|READY/ })).toBeDefined()
 })
 
 test('the play-all button plays every scene in turn, and stops when pressed again', async ($, on) => {

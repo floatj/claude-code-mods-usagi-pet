@@ -21,6 +21,7 @@ const TTL: Partial<Record<Mood, number>> = {
   ranranru: 4200,
   aqua: 4800,
   excalibur: 8400,
+  buster: 9600,
 }
 
 export const INITIAL: Bunny = {
@@ -73,6 +74,7 @@ export const COLOR: Record<Mood, string | undefined> = {
   ranranru: 'yellow',
   aqua: 'blue',
   excalibur: 'yellow',
+  buster: 'cyan',
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -129,6 +131,12 @@ export const captionOf = (b: Bunny): string => {
       const p = b.tick - b.moodTick
 
       return p < 8 ? '風王結界…' : p < 26 ? '解放——' : p < 40 ? 'EX咖哩棒！' : '再來一碗！'
+    }
+    case 'buster': {
+      // Ready, the charge, the shot and its bounce, the volley, and done.
+      const p = b.tick - b.moodTick
+
+      return p < 16 ? 'READY…' : p < 28 ? '集氣中…' : p < 34 ? '兔兔飛彈！' : p < 40 ? '欸？' : p < 52 ? '連射！' : '任務完成！'
     }
   }
 }

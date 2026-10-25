@@ -759,6 +759,65 @@ const CURRIES = [
 const PLATE = ['pppppppp', '.ssssss.']
 const CURRY_INKS = { c: '#c8761e', W: '#ffffff', p: '#e8eef5', s: '#8a9096' }
 
+// A certain blue robot boy's suit, in his dark and light blue: D dark, C light,
+// d the cannon's mouth. Charging, it flashes light blue and then, charged, the
+// shot's own pale yellow.
+type Suit = { D: string; C: string; d: string }
+const SUIT: Suit = { D: '#0058f8', C: '#3cbcfc', d: '#0038a8' }
+const CHARGING_SUIT: Suit = { D: '#3cbcfc', C: '#bcf0fc', d: '#0058f8' }
+const CHARGED_SUIT: Suit = { D: '#fce0a8', C: '#ffffff', d: '#f8b800' }
+// His helmet over her head, her ears through it: a dome with a light panel down
+// its front, coming down about her face to round light ear pieces.
+const HELMET = ['..DDCCCDD..', '.DDDCCCDDD.', '.DDSSSSSDD.', 'CD.......DC', 'CD.......DC', '.D.......D.']
+// Under it, a light blue body, dark gloves and shorts, light thighs and big dark boots.
+const BODY: Record<'forward' | 'up', readonly string[]> = {
+  forward: ['.CCCCCCCCC.', '.DCCCCCCC..', '..DDDDDDD..', '.CCCDDDCCC.', '..DD...DD..', '.DDD...DDD.'],
+  up: ['.CCCCCCCCC.', '..CCCCCCC..', '..DDDDDDD..', '.CCCDDDCCC.', '..DD...DD..', '.DDD...DDD.'],
+}
+// The arm turned cannon, from her shoulder out past her side.
+const CANNON = ['DDDd', 'DDDd']
+const TELEPORT = '#3cbcfc'
+// The buster's shots, in its yellow: a small lemon, and charged, a big one with a tail.
+const LEMON = ['.YY.', 'YwwY', '.YY.']
+const BIG_LEMON = ['..YYY.', '.YwwwY', 'YwWWwY', '.YwwwY', '..YYY.']
+const SHOT_INKS = { Y: '#f8b800', w: '#fce0a8', W: '#ffffff' }
+const CHARGE = ['#fce0a8', '#bcf0fc', '#ffffff', '#f8b800']
+// A little hard-hat foe: its helmet, and under it a face and two feet.
+const MET_HAT = ['.YYY.', 'YYYYY', 'yyyyy']
+const MET_INKS = { Y: '#ffd23f', y: '#c49a1f', K: '#2a2530', W: '#ffffff', o: '#ff8a3a' }
+// Her frames: READY until BEAM_IN, beamed in by ARMED, aiming until CHARGING,
+// charging until FIRE, the shot flying until DEFLECT, bounced off the helmet
+// until VOLLEY, three pellets, one every SHOT_EVERY frames, then its end at
+// BURST_AT, her pose from VICTORY, and beamed out from BEAM_OUT.
+const BEAM_IN = 6
+const ARMED = 12
+const CHARGING = 16
+const FIRE = 28
+const DEFLECT = 34
+const VOLLEY = 40
+const SHOT_EVERY = 2
+const BURST_AT = 49
+const VICTORY = 52
+const BEAM_OUT = 56
+
+/** Her in the robot boy's suit, posed, in the suit's colors of the moment. */
+const robot = (s: Shot, pose: Pose & { arms: 'forward' | 'up' }, suit = SUIT) => {
+  const x = pose.x ?? 0
+  const top = FLOOR - SPRITE_ROWS
+  rabbit(s, { ...pose, lift: 0, isSquashed: false, inks: { ...INKS, T: suit.D, t: suit.D, A: suit.C, a: suit.D, V: suit.D } })
+  paint(s.c, x, top + 10, BODY[pose.arms], { ...INKS, ...suit })
+  paint(s.c, x, top + 4, HELMET, { ...INKS, ...suit })
+  if (pose.arms === 'forward') paint(s.c, x + 9, top + 10, CANNON, { ...INKS, ...suit })
+}
+
+/** A beam of light where she stands, from its `head` row down to its `foot`, `half` pixels either side of her middle. */
+const teleport = (c: Canvas, x: number, head: number, foot: number, half = 0) => {
+  for (let y = Math.max(-2, head); y < Math.min(FLOOR, foot); y += 1) {
+    // A white core down a blue streak; thin, it is all blue.
+    for (let dx = -half; dx <= half; dx += 1) dot(c, x + 5 + dx, y, dx === 0 && half > 0 ? '#ffffff' : TELEPORT)
+  }
+}
+
 // Her dressed as the clown, 15 wide and the stage's full 18 tall, in three poses.
 const CLOWN_W = 15
 const CLOWN_HEAD = [
@@ -1204,6 +1263,133 @@ const SCENES = {
       write(c, plate + 2, 4 - ((p - SUPPER) % 2), '~', '#ffffff')
       dot(c, x + 10, top + (p % 2 ? 9 : 12), GRAY)
       write(c, x + 5, -1, p < SUPPER + 2 ? '!?' : '♪', YELLOW)
+    },
+  },
+
+  // Dressed as a certain blue robot boy: READY, she beams down, her arm turns to
+  // a cannon, and a little hard-hat foe ducks under its helmet. She charges,
+  // flashing, and fires; the shot bounces off the helmet, "TINK!". It peeks out,
+  // she fires three pellets, it bursts in a ring of light, and she beams out.
+  buster: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      // On a narrow stage she stands a column further left, to leave the shot room.
+      const x = width < 26 ? -1 : 1
+      const muzzle = x + 13
+      const foe = width - 6
+
+      if (p < BEAM_IN) {
+        if (p % 2 === 0) write(c, Math.floor((width - 5) / 2), 3, 'READY', '#ffffff')
+        return
+      }
+
+      // The foe: standing, ducked under its helmet, peeking, or gone in a burst.
+      if (p < BURST_AT) {
+        const ducked = p >= ARMED + 2 && !(p >= VOLLEY && p < BURST_AT)
+        const peek = p >= VOLLEY ? 1 : 0
+        // Struck by a pellet, it blinks white.
+        const isHit = p >= VOLLEY + 2 + SHOT_EVERY && (p - VOLLEY) % SHOT_EVERY === 0
+        const inks = isHit ? { Y: '#ffffff', y: '#ffffff', K: '#ffffff', W: '#ffffff', o: '#ffffff' } : MET_INKS
+        if (!ducked || peek) paint(c, foe, FLOOR - 3 - (peek ? 1 : 3), [...MET_HAT, ...(peek ? ['KWKWK'] : ['KWKWK', '.KKK.', 'o...o'])], inks)
+        else paint(c, foe, FLOOR - 3, MET_HAT, inks)
+      } else if (p < VICTORY + 2) {
+        // Its end, a ring of orbs flying out.
+        const r = (p - BURST_AT) * 2 + 1
+        for (let k = 0; k < 8; k += 1) {
+          const angle = (k * Math.PI) / 4
+          paint(c, foe + 2 + Math.round(Math.cos(angle) * r), 12 + Math.round(Math.sin(angle) * r), ['YW', 'WY'], { Y: MET_INKS.Y, W: '#ffffff' })
+        }
+      }
+
+      if (p < ARMED) {
+        // Beamed down: a streak falling to the ground, then filling out into her.
+        const q = p - BEAM_IN
+        if (q < 3) teleport(c, x, -2 + q * 6, 4 + q * 6)
+        else if (q < 5) teleport(c, x, 2 + (4 - q) * 4, FLOOR, q - 2)
+        else robot(s, { x, eyes: 'closed', ears: 'up', arms: 'up' })
+        return
+      }
+
+      if (p >= BEAM_OUT) {
+        // Beamed out: drawn in to a streak, and the streak gone up.
+        const q = p - BEAM_OUT
+        if (q < 2) teleport(c, x, 2 + q * 4, FLOOR, 2 - q)
+        else if (q < 6) teleport(c, x, -2 - (q - 2) * 6, FLOOR - (q - 1) * 6)
+        return
+      }
+
+      const isCharging = p >= CHARGING && p < FIRE
+      // Flashing as she charges, light blue and then, charged, every frame in the shot's yellow.
+      const isFull = p >= CHARGING + 8
+      const flash = isCharging && p >= CHARGING + 3 && (isFull ? p % 2 : Math.floor(p / 2) % 2) === 1
+      const suit = flash ? (isFull ? CHARGED_SUIT : CHARGING_SUIT) : SUIT
+      const recoil = p >= FIRE && p < FIRE + 2 ? -1 : 0
+      const isVictory = p >= VICTORY
+      const eyes = isVictory ? 'happy' : p >= DEFLECT && p < VOLLEY ? 'wide' : 'open'
+      robot(s, { x: x + recoil, eyes, ears: p >= DEFLECT && p < VOLLEY ? 'out' : 'up', arms: isVictory ? 'up' : 'forward' }, suit)
+
+      if (isCharging) {
+        // Light drawn in to the muzzle, and the charge there growing.
+        for (let k = 0; k < 6; k += 1) {
+          const angle = (k * Math.PI) / 3 + p * 0.5
+          const r = 6 - ((p + k) % 6)
+          dot(c, muzzle + Math.round(Math.cos(angle) * r), 10 + Math.round(Math.sin(angle) * r * 0.8), pick(CHARGE, k + p))
+        }
+        const size = p < CHARGING + 4 ? 0 : isFull ? 2 : 1
+        for (let dy = -size; dy <= size; dy += 1) {
+          for (let dx = -size; dx <= size; dx += 1) {
+            if (Math.abs(dx) + Math.abs(dy) <= size) dot(c, muzzle + dx, 10 + dy, Math.abs(dx) + Math.abs(dy) < size ? '#ffffff' : pick(CHARGE, p))
+          }
+        }
+        return
+      }
+
+      if (p < FIRE) {
+        // Taking aim.
+        return
+      }
+
+      if (p < DEFLECT) {
+        // The big lemon, flying down at the helmet; its tail flickering behind.
+        const k = Math.min(4, p - FIRE) / 4
+        const at = Math.round(muzzle + (Math.max(muzzle, foe - 5) - muzzle) * k)
+        const y = Math.round(8 + 3 * k)
+        for (let back = 1; back <= 4; back += 1) {
+          const tail = at - back
+          if (tail >= muzzle) dot(c, tail, y + 2 + pick([0, -1, 1, 0], back + p), back < 3 ? SHOT_INKS.Y : SHOT_INKS.w)
+        }
+        paint(c, at, y, BIG_LEMON, SHOT_INKS)
+        return
+      }
+
+      if (p < VOLLEY) {
+        // Bounced off the helmet, up and away.
+        const q = p - DEFLECT
+        paint(c, foe - 3 + q * 2, 9 - q * 4, BIG_LEMON, SHOT_INKS)
+        if (q < 3) write(c, foe - 6, 1, 'TINK!', '#ffffff')
+        write(c, x + 5, -1, '!?', YELLOW)
+        return
+      }
+
+      if (p < VICTORY) {
+        // It peeks out; three pellets at it, each a flash at the muzzle, a lemon
+        // on its way, and a hit.
+        const end = Math.max(muzzle, foe - 4)
+        for (let k = 0; k < 3; k += 1) {
+          const f = p - (VOLLEY + 2 + k * SHOT_EVERY)
+          if (f < 0 || f > SHOT_EVERY) continue
+          if (f === 0) dot(c, muzzle, 10, '#ffffff')
+          if (f < SHOT_EVERY) paint(c, Math.round(muzzle + ((end - muzzle) * f) / SHOT_EVERY) + 1, 10, LEMON, SHOT_INKS)
+          else write(c, foe - 1, 5, '*', '#ffffff')
+          if (f === 0) write(c, muzzle, 1, 'PEW', pick(['#ffffff', YELLOW], k))
+        }
+        if (p < VOLLEY + 2) write(c, foe + 2, 3, '!', '#ffffff')
+        return
+      }
+
+      write(c, x + 5, -1, p % 2 ? '✦' : '✧', YELLOW)
     },
   },
 
@@ -2051,6 +2237,7 @@ export const REEL: readonly { scene: SceneName; label: string; frames: number }[
   { scene: 'miku', label: '初音 cosplay', frames: 28 },
   { scene: 'aqua', label: '阿克婭 cosplay', frames: 32 },
   { scene: 'excalibur', label: 'EX咖哩棒', frames: 56 },
+  { scene: 'buster', label: '兔兔飛彈', frames: 64 },
   { scene: 'transform', label: '變身', frames: 32 },
   { scene: 'blast', label: '全力全開', frames: 42 },
 ]

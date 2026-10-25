@@ -16,12 +16,14 @@ const SHIFT_LEFT = 3
 // Asleep she breathes slowly: her frame moves on one clock period in this many.
 const SLEEP_EVERY = 8
 // A prompt now and then sets her transforming, a little more often one that
-// wakes her; a turn this long ends in a blast.
+// wakes her; a turn this long ends in a blast, or half the time the robot
+// boy's buster.
 const TRANSFORM_CHANCE = 0.2
 const WAKE_TRANSFORM_CHANCE = 0.25
 const BLAST_AFTER_MS = 120_000
+const BUSTER_CHANCE = 0.5
 // Set pieces a tool call does not cut short.
-const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua', 'excalibur']
+const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua', 'excalibur', 'buster']
 // Now and then an edit brings the shapeshifter; a failure, the goddess or the
 // ghost in its disguise; a finished turn, the clown's chant or the knight's sword.
 const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/
@@ -181,7 +183,7 @@ export const register: Register = on => {
       // now and then a parody, and otherwise her joy.
       ...(b.mood === 'sad' || SHOWS.includes(b.mood)
         ? b
-        : setMood(b, now - turnAt >= BLAST_AFTER_MS ? 'blast' : finale(), now)),
+        : setMood(b, now - turnAt >= BLAST_AFTER_MS ? (Math.random() < BUSTER_CHANCE ? 'buster' : 'blast') : finale(), now)),
       isBusy: false,
     }))
     wake($)
