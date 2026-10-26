@@ -3,7 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Mood } from '../types'
 import { captionOf, COLOR, INITIAL, setMood, step } from './bunny'
-import { FRAME_MS, frameRows, MAX_STAGE, REEL, reelAt, sceneOf, skyAt, STAGE_ROWS } from './scenes'
+import { FRAME_MS, frameRows, isMoonlitAt, MAX_STAGE, REEL, reelAt, sceneOf, skyAt, STAGE_ROWS } from './scenes'
 import { forecastOf, forecastUrl, LOCATORS, WEATHER_MS } from './weather'
 import type { Place, Weather } from './weather'
 
@@ -16,14 +16,21 @@ const SHIFT_LEFT = 3
 // Asleep she breathes slowly: her frame moves on one clock period in this many.
 const SLEEP_EVERY = 8
 // A prompt now and then sets her transforming, a little more often one that
-// wakes her; a turn this long ends in a blast, or half the time the robot
-// boy's buster.
+// wakes her; a turn this long ends in one of three beams: the blast, the robot
+// boy's buster or the magician's spark.
 const TRANSFORM_CHANCE = 0.2
 const WAKE_TRANSFORM_CHANCE = 0.25
 const BLAST_AFTER_MS = 120_000
-const BUSTER_CHANCE = 0.5
+const LONG_TURNS: readonly Mood[] = ['blast', 'buster', 'spark']
+// A turn done this quickly now and then has the maid stop time for it; on a
+// full moon's night the moon rabbit comes now and then, and a prompt naming her
+// brings her at once.
+const QUICK_MS = 15_000
+const WORLD_CHANCE = 0.2
+const LUNATIC_CHANCE = 0.15
+const LUNATIC_WORDS = /鈴仙|優曇華|月兔|reisen|udonge|うどんげ/i
 // Set pieces a tool call does not cut short.
-const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua', 'excalibur', 'buster']
+const SHOWS: readonly Mood[] = ['transform', 'blast', 'welcome', 'boot', 'ditto', 'mimikyu', 'ranranru', 'aqua', 'excalibur', 'buster', 'spark', 'world', 'lunatic']
 // Now and then an edit brings the shapeshifter; a failure, the goddess or the
 // ghost in its disguise; a finished turn, the clown's chant or the knight's sword.
 const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/
@@ -45,6 +52,19 @@ const finale = (): Mood => {
   const roll = Math.random()
 
   return roll < RANRANRU_CHANCE ? 'ranranru' : roll < RANRANRU_CHANCE + EXCALIBUR_CHANCE ? 'excalibur' : 'happy'
+}
+
+/** How a turn that took `took` ms ends at `now`: a beam after a long one, else the maid, the moon rabbit, or the finale. */
+const ending = (took: number, now: number): Mood => {
+  if (took >= BLAST_AFTER_MS) {
+    return LONG_TURNS[Math.floor(Math.random() * LONG_TURNS.length)]!
+  }
+
+  if (took < QUICK_MS && Math.random() < WORLD_CHANCE) {
+    return 'world'
+  }
+
+  return isMoonlitAt(now) && Math.random() < LUNATIC_CHANCE ? 'lunatic' : finale()
 }
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
@@ -138,10 +158,11 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const now = await $.clock.now()
     turnAt = now
-    // Now and then she transforms; else, woken, she greets you, and awake she starts.
+    // Named, the moon rabbit comes; else now and then she transforms, else, woken,
+    // she greets you, and awake she starts.
     const isAsleep = (await read($, pet)).mood === 'sleepy'
     const isTransforming = Math.random() < (isAsleep ? WAKE_TRANSFORM_CHANCE : TRANSFORM_CHANCE)
-    const mood: Mood = isTransforming ? 'transform' : isAsleep ? 'welcome' : 'shock'
+    const mood: Mood = LUNATIC_WORDS.test(e.text ?? '') ? 'lunatic' : isTransforming ? 'transform' : isAsleep ? 'welcome' : 'shock'
     await update($, pet, b => ({ ...setMood(b, mood, now), isBusy: true, turnTick: b.tick }))
     wake($)
 
@@ -179,11 +200,9 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const now = await $.clock.now()
     await update($, pet, b => ({
-      // A sorrow or a set piece still playing stays; else a blast after a long turn,
+      // A sorrow or a set piece still playing stays; else a beam after a long turn,
       // now and then a parody, and otherwise her joy.
-      ...(b.mood === 'sad' || SHOWS.includes(b.mood)
-        ? b
-        : setMood(b, now - turnAt >= BLAST_AFTER_MS ? (Math.random() < BUSTER_CHANCE ? 'buster' : 'blast') : finale(), now)),
+      ...(b.mood === 'sad' || SHOWS.includes(b.mood) ? b : setMood(b, ending(now - turnAt, now), now)),
       isBusy: false,
     }))
     wake($)
@@ -209,9 +228,10 @@ export const register: Register = on => {
     // The reel, while it runs, plays in place of what she is doing; past its end it stops.
     const reel = reelFrom === undefined ? undefined : reelAt(b.tick - reelFrom)
     reelFrom = reel === undefined ? undefined : reelFrom
+    const scene = sceneOf(b, word, seed)
     const stage = reel
       ? frameRows(reel.scene, b.tick, width, reel.since, sky, weather)
-      : frameRows(sceneOf(b, word, seed), b.tick, width, b.tick - b.moodTick, sky, weather)
+      : frameRows(scene, b.tick, width, b.tick - b.moodTick, sky, weather)
     const color = reel ? 'magenta' : COLOR[b.mood]
 
     return (
@@ -237,7 +257,7 @@ export const register: Register = on => {
           ))}
         </Box>
         <Text key="caption" color={color}>
-          {reel ? `▶ ${reel.index + 1}/${REEL.length} ${reel.label}` : captionOf(b)}
+          {reel ? `▶ ${reel.index + 1}/${REEL.length} ${reel.label}` : captionOf(b, scene)}
         </Text>
         <Box gap={1}>
           <Button

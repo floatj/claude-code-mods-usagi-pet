@@ -175,7 +175,7 @@ const isGoingRight = (t: number, span: number) => span <= 0 || t % (span * 2) < 
 
 // ---- The rabbit ----
 
-type Ears = 'up' | 'left' | 'right' | 'out' | 'down'
+type Ears = 'up' | 'left' | 'right' | 'out' | 'down' | 'none'
 type Eyes = 'open' | 'left' | 'right' | 'closed' | 'happy' | 'wide'
 type Feet = 'sit' | 'a' | 'b' | 'tuck'
 type Arms = 'down' | 'up' | 'left' | 'right' | 'reach' | 'forward'
@@ -187,6 +187,8 @@ const EARS: Record<Exclude<Ears, 'down'>, readonly string[]> = {
   left: ['.F......F..', 'FPF....FPF.', 'FPF....FPF.', '.FPF...FPF.'],
   right: ['..F......F.', '.FPF....FPF', '.FPF....FPF', '.FPF...FPF.'],
   out: ['...........', 'FF.......FF', 'FPF.....FPF', '.FPF...FPF.'],
+  // Under a hat.
+  none: [],
 }
 // Lop ears hang down beside her face instead, from the headband.
 const LOP = ['.FF.....FF.', 'FPF.....FPF', 'FP.......PF', 'FP.......PF', 'FF.......FF']
@@ -440,6 +442,23 @@ export const skyAt = (ms: number): Sky => {
   const hour = new Date(ms).getHours()
 
   return hour < DAWN || hour >= NIGHTFALL ? 'night' : hour >= DUSK_HOUR ? 'dusk' : 'day'
+}
+
+// A new moon to count from, the days from one to the next, and how many days
+// either side of full the moon still counts as full.
+const NEW_MOON_MS = Date.UTC(2000, 0, 6, 18, 14)
+const LUNATION_DAYS = 29.530588853
+const FULL_DAYS = 2
+const DAY_MS = 86_400_000
+// The hour the full moon's night begins; it ends at DAWN.
+const MOONRISE_HOUR = 18
+
+/** Whether `ms` falls on a night of the full moon, six in the evening to six in the morning. */
+export const isMoonlitAt = (ms: number) => {
+  const age = ((((ms - NEW_MOON_MS) / DAY_MS) % LUNATION_DAYS) + LUNATION_DAYS) % LUNATION_DAYS
+  const hour = new Date(ms).getHours()
+
+  return Math.abs(age - LUNATION_DAYS / 2) <= FULL_DAYS && (hour >= MOONRISE_HOUR || hour < DAWN)
 }
 
 // A star's colors as it twinkles: bright, warm, cool, dim.
@@ -816,6 +835,194 @@ const teleport = (c: Canvas, x: number, head: number, foot: number, half = 0) =>
     // A white core down a blue streak; thin, it is all blue.
     for (let dx = -half; dx <= half; dx += 1) dot(c, x + 5 + dx, y, dx === 0 && half > 0 ? '#ffffff' : TELEPORT)
   }
+}
+
+// ---- Gensokyo ----
+
+// The shrine maiden's orb, red and white, as the loading screen turns it: a
+// red eye in the white, a white eye in the red.
+const ORB = ['..RRRR..', '.RRRRRW.', 'RRRRWRWW', 'RRRRRWWW', 'RRRWWWWW', 'RRWRWWWW', '.RWWWWW.', '..WWWW..']
+const ORB_INKS = { R: '#e8384f', W: '#ffffff' }
+
+/** The orb with its top left at (x, y), turned a quarter clockwise `turns` times. */
+const orb = (c: Canvas, x: number, y: number, turns: number) => {
+  let rows = ORB
+  for (let k = 0; k < ((turns % 4) + 4) % 4; k += 1) {
+    rows = rows.map((_, row) => rows.map(line => line[row]).reverse().join(''))
+  }
+  paint(c, x, y, rows, ORB_INKS)
+}
+
+// The loading screen's frames: praying until PRAYED, then done; and her, not yet loaded.
+const UNLOADED = '#33363d'
+const PRAYED = 24
+
+// The ordinary magician's: golden hair, a black dress under her white apron,
+// bare hands, golden eyes. Black is lightened to show on the stage's black.
+const MARISA = { ...INKS, T: '#f8e07a', t: '#c9a83a', A: '#46405e', a: '#46405e', V: '#ffdfc8', k: '#e8b830' }
+// Her witch's hat over her ears: its tip, still or blown back, then the cone, a white band and a wide brim.
+const HAT_TIPS = [
+  ['..KK.........', '...KKK.......'],
+  ['KK...........', '.KKKK........'],
+]
+const WITCH_HAT = ['....KKKK.....', '....KKKKK....', '...KKKKKKK...', '...WWWWWWW...', 'KKKKKKKKKKKKK']
+const WITCH_INKS = { K: '#46405e', W: '#ffffff' }
+// The little furnace she fires it from, eight-sided, its heart glowing.
+const HAKKERO = ['.hh.', 'hyyh', 'hyyh', '.hh.']
+// Her broom, its bristles behind her.
+const BROOM = ['yy............', 'YYYnnnnnnnnnnn', 'yy............']
+const BROOM_INKS = { Y: '#e8c860', y: '#c9a040', n: '#8b5a2b' }
+// A stack of borrowed books.
+const BOOKS = ['wLLLL', 'GGGGw', 'wRRRR']
+const BOOK_INKS = { L: '#5fafff', G: '#6fcf6f', R: '#ff5f5f', w: '#ececec' }
+const RAINBOW = ['#ff5f5f', '#ffaf5f', '#ffd75f', '#6fcf6f', '#5fd7ff', '#c77dff']
+// Her frames: flying in until LANDED, aiming until CHARGE, charging until FIRE,
+// the beam until SPENT, the smoke until LOOT, the books, and away on her broom from AWAY.
+const SPARK = { LANDED: 8, CHARGE: 14, FIRE: 22, SPENT: 38, LOOT: 46, AWAY: 52 }
+// The beam's middle, its widest half-height, and how fast it widens.
+const SPARK_AXIS = 10.5
+const SPARK_HALF = 6
+const SPARK_SPREAD = 0.9
+
+/** Her as the magician, hat and all; `tip` 1 blows its tip back. */
+const witch = (s: Shot, pose: Pose, tip = 0) => {
+  const x = pose.x ?? 0
+  const top = FLOOR - SPRITE_ROWS - (pose.lift ?? 0) + (pose.isSquashed ? 1 : 0)
+  rabbit(s, { lift: 0, isSquashed: false, ...pose, ears: 'none', inks: MARISA })
+  paint(s.c, x - 1, top - 2, [...HAT_TIPS[tip]!, ...WITCH_HAT], WITCH_INKS)
+}
+
+/** Stars trailing behind her, from `x` back. */
+const trail = (c: Canvas, x: number, row: number, p: number) => {
+  for (let k = 0; k < 3; k += 1) write(c, x - 2 - k * 3, row + ((p + k) % 2), pick(['✦', '✧'], p + k), pick(RAINBOW, p + k * 2))
+}
+
+// The maid of the scarlet mansion's: silver hair in two braids tied in green,
+// a navy dress, bare hands, a white frilled headdress.
+const SAKUYA = { ...INKS, T: '#b8bfcc', t: '#7f889c', A: '#30479a', a: '#30479a', V: '#ffdfc8' }
+const BRAID_BOW = '#3fb860'
+// Her pocket watch, its hand straight up once time stops.
+const WATCHES = [
+  ['.YY.', 'YWKY', 'YWWY', '.YY.'],
+  ['.YY.', 'YKWY', 'YWWY', '.YY.'],
+]
+// The bug her knives are for: a green beetle on wriggling legs.
+const BUGS = [
+  ['k...k', '.kRk.', 'RRRRR', 'RrRrR', 'k.k.k'],
+  ['.k.k.', '.kRk.', 'RRRRR', 'RrRrR', '.k.k.'],
+]
+const BUG_INKS = { k: '#aab0b6', R: '#6fcf6f', r: '#3f9f4f' }
+// A knife from handle to point, and where each one stops round the bug: degrees, pixels out.
+const KNIFE = ['#8a7aa0', '#c8ccd6', '#e8ecf2', '#ffffff']
+const KNIVES: readonly (readonly [number, number])[] = [[180, 5], [200, 8], [220, 5], [240, 8.5], [255, 5.5], [270, 9]]
+// A cup of tea on its saucer.
+const TEACUP = ['RRRR.', 'WWWWW', 'WWWW.', 'wwwwww']
+const TEA_INKS = { R: '#b0603a', W: '#ffffff', w: '#aab0b6' }
+// Her frames: the watch until STOP, the world gone gray until FLOW with a knife
+// thrown every second frame, the knives loosed, the bug's end by TEA, then her tea.
+const WORLD = { STOP: 8, THROW: 14, FLOW: 28, TEA: 34, BOW: 38 }
+
+// What shows behind the stopped world, where nothing is painted.
+const STOPPED_SKY = '#2a2833'
+
+/** Grays every color painted so far that `isIn` takes, the bare stage a dim gray: the world with its time stopped. */
+const stopped = (c: Canvas, isIn: (x: number, y: number) => boolean = () => true) => {
+  const gray = (color: string | undefined) => {
+    if (!color?.startsWith('#')) return color
+    const n = parseInt(color.slice(1), 16)
+    const l = Math.round(((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) * 0.75)
+    return `#${l.toString(16).padStart(2, '0').repeat(3)}`
+  }
+
+  c.px.forEach((line, row) =>
+    line.forEach((color, at) => {
+      if (!isIn(at, row - SKY * 2)) return
+      line[at] = gray(color) ?? STOPPED_SKY
+      const half = c.halves[row]![at]
+      if (half) c.halves[row]![at] = [gray(half[0]), gray(half[1])]
+    }),
+  )
+  c.glyphs.forEach((line, row) =>
+    line.forEach((one, at) => {
+      if (one && isIn(at, (row - SKY) * 2)) line[at] = { ...one, color: gray(one.color), bg: gray(one.bg) ?? STOPPED_SKY }
+    }),
+  )
+}
+
+/** A knife with its point at (x, y), pointing along `angle` radians. */
+const knife = (c: Canvas, x: number, y: number, angle: number) => {
+  KNIFE.forEach((color, k) => dot(c, Math.round(x - Math.cos(angle) * (3 - k)), Math.round(y - Math.sin(angle) * (3 - k)), color))
+}
+
+/** Her as the maid of the mansion: braids, their bows and her headdress over her own. */
+const maid = (s: Shot, pose: Pose) => {
+  const x = pose.x ?? 0
+  const top = FLOOR - SPRITE_ROWS + (pose.nod ?? 0)
+  rabbit(s, { lift: 0, isSquashed: false, ...pose, inks: SAKUYA })
+  paint(s.c, x, top + 4, ['..FFFFFFF..'], SAKUYA)
+  for (const at of [x + 1, x + 9]) {
+    paint(s.c, at, FLOOR - SPRITE_ROWS + 10, ['T', 'T'], SAKUYA)
+    dot(s.c, at, FLOOR - SPRITE_ROWS + 12, BRAID_BOW)
+  }
+}
+
+// The moon rabbit's: long lilac hair, a dark blazer over a white blouse and
+// red tie, a pink skirt, red eyes, one ear bent.
+const REISEN = { ...INKS, T: '#c9b0ec', t: '#9d82cc', A: '#363b5e', a: '#e8404a', V: '#ffdfc8', k: '#ff3a4a' }
+const REISEN_SKIRT = '#f0a0c0'
+// Her eyes alight, and the rings of their madness.
+const LUNATIC_RED = ['#ff3a4a', '#ff8a95']
+const RIPPLES = ['#ff5f8a', '#c77dff']
+// Her phantoms' outlines.
+const PHANTOM = ['#c77dff', '#8a5ad0']
+// Her shots, shaped like bullets, tail to point.
+const BULLET = ['#c0304a', '#ff5f7a', '#ffd0d8']
+// The full moon, and its shadows.
+const FULL_MOON = { M: '#fff3b0', m: '#e8d890' }
+const MOON = ['..MMM..', '.MMMmM.', 'MmMMMMM', 'MMMMMmM', 'MMmMMMM', '.MMMMM.', '..MMM..']
+// A mortar of rice cake, its cake, and the mallet: handle and head.
+const USU = ['NNNNNN', '.nNNn.', '.nNNn.', 'nnnnnn']
+const MOCHI = { up: ['.WWWW.', 'WWWWWW'], down: ['......', 'WWWWWW'] }
+const MOCHI_INKS = { N: '#9b6a3a', n: '#6b4423', W: '#ffffff', h: '#c9a070' }
+// Her frames: moonrise until GLARE, her eyes until MADNESS, the phantoms until
+// VOLLEY, their shots until BREAK, gone one by one until MOCHI, then rice cake.
+const LUNATIC = { GLARE: 8, MADNESS: 14, VOLLEY: 26, BREAK: 38, MOCHI: 46 }
+
+const mix = (a: string, b: string, k: number) => {
+  const [x, y] = [parseInt(a.slice(1), 16), parseInt(b.slice(1), 16)]
+  return `#${[16, 8, 0].map(at => Math.round(((x >> at) & 255) * (1 - k) + ((y >> at) & 255) * k).toString(16).padStart(2, '0')).join('')}`
+}
+
+/** Her as the moon rabbit, or, `faded`, a phantom of her; `isGlaring` lights her eyes. */
+const moonRabbit = (s: Shot, pose: Pose, faded = 0, isGlaring = false) => {
+  const x = pose.x ?? 0
+  const top = FLOOR - SPRITE_ROWS
+  const inks = faded ? Object.fromEntries(Object.entries(REISEN).map(([key, color]) => [key, mix(color, '#5a2a6a', faded)])) : REISEN
+  const skirt = faded ? mix(REISEN_SKIRT, '#5a2a6a', faded) : REISEN_SKIRT
+  rabbit(s, { lift: 0, isSquashed: false, ears: 'right', ...pose, x, inks })
+  // Her hair, long to her knees down either side, and the skirt.
+  for (const at of [x, x + 10]) paint(s.c, at, top + 8, ['T', 'T', 't', 'T', 't', 't'], inks)
+  paint(s.c, x, top + 12, ['..SSSSSSS..', '.SSSSSSSSS.'], { S: skirt })
+
+  if (isGlaring) {
+    for (const at of [x + 3, x + 7]) {
+      dot(s.c, at, top + 7, pick(LUNATIC_RED, s.since))
+      dot(s.c, at, top + 8, LUNATIC_RED[0]!)
+    }
+  }
+}
+
+/** Sways each row of a canvas sideways, `amp` pixels at most: the air bent by her eyes. */
+const wobble = (c: Canvas, p: number, amp: number) => {
+  const by = (row: number) => Math.round(Math.sin(row * 0.6 + p * 0.9) * amp)
+  const shift = <T,>(line: T[], n: number) => line.map((_, at) => line[at - n] as T)
+  c.px.forEach((line, row) => {
+    c.px[row] = shift(line, by(row))
+    c.halves[row] = shift(c.halves[row]!, by(row))
+  })
+  c.glyphs.forEach((line, row) => {
+    c.glyphs[row] = shift(line, by(row * 2))
+  })
 }
 
 // Her dressed as the clown, 15 wide and the stage's full 18 tall, in three poses.
@@ -1393,6 +1600,258 @@ const SCENES = {
     },
   },
 
+  // Dressed as the ordinary magician: in low on her broom, stars behind her; the
+  // little furnace held out, light drawn into it, and a beam the width of the
+  // stage, edged in rainbow. Smoke, then a stack of books she makes off with.
+  spark: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x = 1
+      const top = FLOOR - SPRITE_ROWS
+
+      if (p < SPARK.LANDED || p >= SPARK.AWAY) {
+        // On her broom: flying in to where she lands, or off up and away with the books.
+        const q = p < SPARK.LANDED ? p + 1 - SPARK.LANDED : p - SPARK.AWAY + 1
+        const at = x + q * (q < 0 ? 2 : 3)
+        const lift = p < SPARK.LANDED ? 2 + (p % 2) : 2 + q * 2
+        const seat = FLOOR - SPRITE_ROWS - lift + 1
+        witch(s, { x: at, lift, isSquashed: true, arms: p < SPARK.LANDED ? 'down' : 'forward', eyes: p < SPARK.LANDED ? 'right' : 'happy' }, 1)
+        paint(c, at - 4, seat + 13, BROOM, BROOM_INKS)
+        if (p >= SPARK.AWAY) paint(c, at + 9, seat + 8, BOOKS, BOOK_INKS)
+        trail(c, at - 3, Math.floor((seat + 13) / 2), p)
+        return
+      }
+
+      const isFiring = p >= SPARK.FIRE && p < SPARK.SPENT
+      const isLoot = p >= SPARK.LOOT
+      // Pushed back as it fires, then braced, shaking with it.
+      const bx = p >= SPARK.CHARGE + 4 && p < SPARK.FIRE ? x + (p % 2) : isFiring ? (p < SPARK.FIRE + 2 ? x - 1 : p < SPARK.SPENT - 4 ? x - (p % 2) : x) : x
+      const eyes = isLoot ? (p < SPARK.LOOT + 3 ? 'wide' : 'happy') : p >= SPARK.SPENT + 2 && p < SPARK.SPENT + 6 ? 'closed' : isFiring ? (p < SPARK.FIRE + 2 ? 'closed' : 'wide') : 'open'
+      const tip = (p >= SPARK.CHARGE && p % 2) || isFiring || (p >= SPARK.SPENT && !isLoot) ? 1 : 0
+      witch(s, { x: bx, arms: 'forward', eyes }, tip)
+
+      if (isLoot) {
+        // A stack of books, dropped from nowhere; then in her arms.
+        const q = p - SPARK.LOOT
+        const fall = Math.min(FLOOR - 3, -2 + q * 8)
+        const k = Math.min(1, Math.max(0, (q - 3) / 2))
+        paint(c, Math.round(width - 7 + (x + 10 - (width - 7)) * k), Math.round(fall + (top + 8 - fall) * k), BOOKS, BOOK_INKS)
+        if (q < 3) write(c, x + 5, -1, '!', YELLOW)
+        return
+      }
+
+      const glow = isFiring ? '#ffffff' : p >= SPARK.CHARGE ? pick([YELLOW, '#ffffff'], p) : '#ffb347'
+      paint(c, bx + 11, top + 9, HAKKERO, { h: '#8a6a4a', y: glow })
+
+      if (p >= SPARK.CHARGE && p < SPARK.FIRE) {
+        // Light drawn in to it from all round, in every color.
+        for (let k = 0; k < 8; k += 1) {
+          const angle = (k * Math.PI) / 4 + p * 0.4
+          const r = 8 - ((p + k) % 8)
+          dot(c, bx + 13 + Math.round(Math.cos(angle) * r), Math.round(SPARK_AXIS + Math.sin(angle) * r * 0.8), pick(RAINBOW, k + p))
+        }
+        return
+      }
+
+      if (isFiring) {
+        // A beam from the furnace, swelling to full in three frames and thinning at the end:
+        // a white core, pale gold, and a rim in bands of rainbow running out along it.
+        const muzzle = bx + 15
+        const swell = Math.min(1, (p - SPARK.FIRE + 1) / 3) * (p < SPARK.SPENT - 4 ? 1 : p < SPARK.SPENT - 2 ? 0.5 : 0.2)
+
+        for (let at = muzzle; at < width; at += 1) {
+          const half = Math.max(0.5, Math.min(SPARK_HALF, 1.5 + (at - muzzle) * SPARK_SPREAD) * swell)
+          const core = p % 2 ? 0.45 : 0.3
+
+          for (let y = Math.max(-2, Math.ceil(SPARK_AXIS - half)); y <= Math.min(FLOOR - 1, Math.floor(SPARK_AXIS + half)); y += 1) {
+            const off = Math.abs(y - SPARK_AXIS) / half
+            dot(c, at, y, off < core ? '#ffffff' : off < 0.7 ? '#fff3b0' : pick(RAINBOW, Math.floor((at - p * 2) / 2)))
+          }
+
+          // Stars thrown off its edges.
+          if ((at * 7 + p * 3) % 6 === 0) {
+            const side = (at + p) % 2 ? 1 : -1
+            dot(c, at, Math.round(SPARK_AXIS + side * (half + 1 + ((at + p) % 2))), pick(RAINBOW, at + p))
+          }
+        }
+
+        if (p >= SPARK.FIRE + 2) write(c, Math.max(0, width - 12), -1, 'MASTER SPARK', p % 2 ? YELLOW : '#ffffff')
+        return
+      }
+
+      if (p >= SPARK.SPENT) {
+        // Smoke curling up from the furnace.
+        const rise = (p - SPARK.SPENT) % 3
+        write(c, bx + 13, Math.floor((top + 8) / 2) - rise, '~', GRAY)
+        write(c, bx + 14, Math.floor((top + 6) / 2) - rise, '∘', GRAY)
+      }
+    },
+  },
+
+  // Dressed as the mansion's maid: her watch ticks, clicks, and the world goes
+  // gray but for her. She throws knife after knife, each stopping where it
+  // leaves her hand, round a bug; time runs again, they all strike, and it is
+  // fixed. Then tea, and a bow.
+  world: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x = 0
+      const top = FLOOR - SPRITE_ROWS
+      const bug = { x: width - 5, y: FLOOR - 5 }
+      const aim = { x: bug.x + 2, y: bug.y + 2 }
+      const hand = { x: x + 11, y: top + 10 }
+      const isStopped = p >= WORLD.STOP && p < WORLD.FLOW
+      const isHit = p >= WORLD.FLOW + 2
+
+      // The bug, until the knives strike; it blinks white as they do, then bursts.
+      if (p < WORLD.FLOW + 4) {
+        const inks = isHit ? { k: '#ffffff', R: '#ffffff', r: '#ffffff' } : BUG_INKS
+        if (!isHit || p < WORLD.FLOW + 2 + 2) paint(c, bug.x, bug.y, pick(BUGS, isStopped ? 0 : Math.floor(p / 2)), inks)
+        if (!isStopped && !isHit) write(c, bug.x + 1, Math.floor(bug.y / 2) - 1, 'BUG', '#aab0b6')
+      }
+
+      if (p >= WORLD.STOP && p < WORLD.THROW) {
+        // Stopped from her watch outward, a ring running out over the stage.
+        const r = (p - WORLD.STOP + 1) * 5
+        stopped(c, (at, y) => (at - hand.x) ** 2 + (y - hand.y) ** 2 <= r * r)
+        for (let k = 0; k < 40; k += 1) {
+          const angle = (k * Math.PI) / 20
+          dot(c, hand.x + Math.round(Math.cos(angle) * r), hand.y + Math.round(Math.sin(angle) * r), '#c8ccd6')
+        }
+      } else if (isStopped) {
+        stopped(c)
+      }
+
+      const isTea = p >= WORLD.TEA
+      const isBowing = p >= WORLD.BOW && p < WORLD.BOW + 6
+      const isThrowing = p >= WORLD.THROW && p < WORLD.FLOW && (p - WORLD.THROW) % 2 === 0
+      const eyes = isBowing ? 'closed' : isTea ? 'happy' : p >= WORLD.STOP && p < WORLD.THROW ? 'wide' : 'open'
+      maid(s, { x, eyes, ears: isBowing ? 'out' : 'up', arms: isThrowing || isTea || p < WORLD.THROW || p >= WORLD.FLOW ? 'right' : 'down', nod: isBowing ? 1 : 0 })
+
+      if (p < WORLD.THROW || (p >= WORLD.FLOW && p < WORLD.FLOW + 2)) {
+        paint(c, x + 10, top + 7, pick(WATCHES, p >= WORLD.STOP ? 1 : Math.floor(p / 2)), { Y: '#ffd75f', W: '#ffffff', K: '#2a2530' })
+      }
+
+      if (p < WORLD.STOP) write(c, x + 12, 1, p % 4 < 2 ? 'tick' : 'tack', '#c8ccd6')
+      if (p >= WORLD.STOP && p < WORLD.THROW) write(c, Math.max(0, width - 9), -1, 'THE WORLD', p % 2 ? '#ffffff' : '#c8ccd6', STOPPED_SKY)
+
+      if (p >= WORLD.THROW && p < WORLD.FLOW + 2) {
+        // Each knife from her hand to its place, there to hang; loosed, all of them into the bug.
+        KNIVES.forEach(([degrees, out], i) => {
+          const thrown = WORLD.THROW + i * 2
+          if (p < thrown) return
+          const angle = (degrees * Math.PI) / 180
+          const slot = { x: aim.x + Math.cos(angle) * out, y: aim.y + Math.sin(angle) * out }
+          const k = p < WORLD.FLOW ? Math.min(1, (p - thrown) / 2) : Math.min(1, (p - WORLD.FLOW + 1) / 2)
+          const [from, to] = p < WORLD.FLOW ? [hand, slot] : [slot, aim]
+          knife(c, Math.round(from.x + (to.x - from.x) * k), Math.round(from.y + (to.y - from.y) * k), angle + Math.PI)
+        })
+      }
+
+      if (p >= WORLD.FLOW + 2 && p < WORLD.TEA) {
+        if (p >= WORLD.FLOW + 4) {
+          // Its end: a ring of sparks.
+          const r = (p - WORLD.FLOW - 3) * 2
+          for (let k = 0; k < 8; k += 1) dot(c, aim.x + Math.round(Math.cos((k * Math.PI) / 4) * r), aim.y + Math.round(Math.sin((k * Math.PI) / 4) * r), k % 2 ? '#ffffff' : GREEN)
+        } else {
+          write(c, aim.x, Math.floor(aim.y / 2) - 2, '*', '#ffffff')
+        }
+        write(c, Math.max(0, width - 7), 1, 'FIXED!', p % 2 ? GREEN : '#ffffff')
+      }
+
+      if (isTea) {
+        // A cup of tea held out, steaming.
+        const cup = { x: x + 11, y: top + 8 + (isBowing ? 1 : 0) }
+        paint(c, cup.x, cup.y, TEACUP, TEA_INKS)
+        write(c, cup.x + 1 + (p % 2), Math.floor(cup.y / 2) - 1, '~', '#c8ccd6')
+        if (p >= WORLD.BOW + 6) write(c, x + 5, -1, '♪', YELLOW)
+      }
+    },
+  },
+
+  // Dressed as the moon rabbit: the full moon rises, her eyes turn red and
+  // glow, the air ripples and bends, and she is three. All three fire bullets;
+  // the phantoms break up one by one, and she pounds rice cake under the moon.
+  lunatic: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const top = FLOOR - SPRITE_ROWS
+      const center = Math.max(0, Math.floor((width - SPRITE) / 2))
+      const isMochi = p >= LUNATIC.MOCHI
+      const x = p < LUNATIC.MADNESS || isMochi ? 1 : center
+
+      // The moon, rising until her eyes light.
+      paint(c, width - 8, Math.max(-2, 8 - p * 2), MOON, FULL_MOON)
+
+      if (p >= LUNATIC.MADNESS && p < LUNATIC.BREAK + 4) {
+        // Rings running out from her eyes.
+        for (let k = 0; k < 2; k += 1) {
+          const r = ((p - LUNATIC.MADNESS) * 2 + k * 7) % 14
+          for (let a = 0; a < 24; a += 1) {
+            const angle = (a * Math.PI) / 12
+            dot(c, x + 5 + Math.round(Math.cos(angle) * r), top + 7 + Math.round(Math.sin(angle) * r), RIPPLES[k % 2]!)
+          }
+        }
+      }
+
+      if (p >= LUNATIC.MADNESS && p < LUNATIC.MOCHI) {
+        // Her phantoms either side, outlines wavering in the bent air; the left one breaks up first, then the right.
+        ;[-6, 6].forEach((dx, i) => {
+          const goneFrom = LUNATIC.BREAK + i * 4
+          if (p >= goneFrom + 4) return
+          const phantom = canvasOf(width)
+          moonRabbit({ ...s, c: phantom }, { x: x + dx, eyes: 'open', arms: p >= LUNATIC.VOLLEY ? 'right' : 'down' }, 0.6)
+          wobble(phantom, p + i * 3, 1)
+          const isEdge = (row: number, at: number) =>
+            [phantom.px[row - 1]?.[at], phantom.px[row + 1]?.[at], phantom.px[row]?.[at - 1], phantom.px[row]?.[at + 1]].includes(undefined)
+          phantom.px.forEach((line, row) =>
+            line.forEach((color, at) => {
+              if (color === undefined || !isEdge(row, at)) return
+              if (p < goneFrom || hash(at * 31 + row * 7 + p) > (p - goneFrom + 1) / 4) c.px[row]![at] = pick(PHANTOM, row + i)
+            }),
+          )
+        })
+      }
+
+      const isGlaring = p >= LUNATIC.GLARE && !isMochi
+      const isShooting = p >= LUNATIC.VOLLEY && p < LUNATIC.BREAK
+      moonRabbit(s, { x, eyes: isMochi ? 'happy' : p >= LUNATIC.GLARE ? 'wide' : 'open', arms: isShooting || isMochi ? 'right' : 'down' }, 0, isGlaring)
+
+      if (isShooting) {
+        // Bullets from every finger-gun, a pair each frame, flying out to the right.
+        for (const from of [x - 6, x, x + 6]) {
+          for (let k = 0; k < 6; k += 1) {
+            const age = p - LUNATIC.VOLLEY - k
+            if (age < 0) continue
+            const y = top + 11 + pick([0, -3, 2, -1, 3, -2], k + from)
+            const at = from + 11 + age * 3
+            BULLET.forEach((color, i) => dot(c, at + i, y, color))
+          }
+        }
+        if ((p - LUNATIC.VOLLEY) % 4 < 2) write(c, x + 9, 0, 'BANG', LUNATIC_RED[0]!)
+      }
+
+      if (isMochi) {
+        // Rice cake under the moon: the mallet up, and down on it.
+        const mortar = x + 13
+        const isDown = (p - LUNATIC.MOCHI) % 4 >= 2
+        paint(c, mortar, FLOOR - 4, USU, MOCHI_INKS)
+        paint(c, mortar, FLOOR - 6, isDown ? MOCHI.down : MOCHI.up, MOCHI_INKS)
+        // Its handle from her hand, its head up high or on the cake.
+        const head = isDown ? { x: mortar + 1, y: FLOOR - 8 } : { x: x + 12, y: top + 2 }
+        for (let k = 1; k <= 4; k += 1) dot(c, Math.round(x + 10 + ((head.x + 1 - x - 10) * k) / 5), Math.round(top + 11 + ((head.y + 2 - top - 11) * k) / 5), MOCHI_INKS.h)
+        paint(c, head.x, head.y, ['NNN', 'nnn'], MOCHI_INKS)
+        if (isDown) write(c, mortar - 1, 3, 'PETTAN', '#ffffff', '#000000')
+      }
+    },
+  },
+
   // A handheld's boot: the logo slides down under her little head, chimes,
   // scatters, and gathers into her.
   bootHandheld: {
@@ -1638,6 +2097,65 @@ const SCENES = {
 
       write(c, bx, 4, `${Math.round(shown * 100)}%`, '#ffffff')
       if (p >= 20 && p < 24) write(c, bx + 5, 4, '♪', YELLOW)
+    },
+  },
+
+  // The land of illusions' loading screen: she prays, eyes shut and hands
+  // together, while the shrine maiden's orb turns over "Now Loading". She is an
+  // outline at first, her colors filling in from her feet up as it loads, a
+  // bright line where they reach; done, the orb stops, her ears spring up and
+  // she cheers.
+  bootPray: {
+    isWide: true,
+    draw: s => {
+      const { c, width } = s
+      const p = s.since
+      const x = Math.max(0, Math.floor((width - 22) / 2))
+      const top = FLOOR - SPRITE_ROWS
+      const isDone = p >= PRAYED
+      const isCheering = p >= PRAYED + 2
+      // Drawn whole first, to be shown only as far as she has loaded.
+      const her = isDone ? c : canvasOf(width)
+      rabbit({ ...s, c: her }, { x, lift: p === PRAYED + 2 ? 1 : 0, isSquashed: false, eyes: isCheering ? 'happy' : isDone ? 'open' : 'closed', ears: isDone ? 'up' : 'out', arms: isCheering ? 'up' : 'down' })
+
+      if (!isCheering) {
+        // Her hands together before her, sleeves where her gloves were.
+        paint(her, x + 2, top + 11, ['A.....A'])
+        paint(her, x + 4, top + 10, ['.V.', 'VVV'])
+      }
+
+      if (!isDone) {
+        // Loaded from her feet up to `line`: in color below it, white along it,
+        // and above it a gray outline round a dark silhouette.
+        const line = FLOOR - Math.ceil(((p + 1) * (SPRITE_ROWS + SKY * 2)) / PRAYED) + SKY * 2
+        const isEdge = (row: number, at: number) =>
+          [her.px[row - 1]?.[at], her.px[row + 1]?.[at], her.px[row]?.[at - 1], her.px[row]?.[at + 1]].includes(undefined)
+
+        her.px.forEach((pixels, row) =>
+          pixels.forEach((color, at) => {
+            if (color === undefined) return
+            if (row > line) {
+              c.px[row]![at] = color
+              c.halves[row]![at] = her.halves[row]![at]
+            } else if (row === line) {
+              c.px[row]![at] = '#ffffff'
+            } else {
+              c.px[row]![at] = isEdge(row, at) ? GRAY : UNLOADED
+            }
+          }),
+        )
+        // Her eyes and earrings, once loaded.
+        her.glyphs.forEach((cells, row) =>
+          cells.forEach((one, at) => {
+            if (one && row * 2 > line) c.glyphs[row]![at] = one
+          }),
+        )
+      }
+
+      orb(c, x + 13, 0, isDone ? 0 : Math.floor(p / 2))
+      write(c, x + 11, 6, 'Now Loading', '#ffffff')
+      write(c, x + 18, 7, isDone ? '...' : '.'.repeat((Math.floor(p / 3) % 3) + 1), '#ffffff')
+      if (isCheering) write(c, x + 12, 5, 'OK!', p % 2 ? YELLOW : '#ffffff')
     },
   },
 
@@ -2198,7 +2716,7 @@ const SCENES = {
 
 export type SceneName = keyof typeof SCENES
 // The boot screens, one of them played as a session starts.
-const BOOTS: readonly SceneName[] = ['bootHandheld', 'bootBios', 'bootHole', 'bootSummon', 'bootLoading']
+const BOOTS: readonly SceneName[] = ['bootHandheld', 'bootBios', 'bootHole', 'bootSummon', 'bootLoading', 'bootPray']
 export const SCENE_NAMES = Object.keys(SCENES) as SceneName[]
 
 // Every scene in turn, for the play-all button: the boot screens first, each
@@ -2210,6 +2728,7 @@ export const REEL: readonly { scene: SceneName; label: string; frames: number }[
   { scene: 'bootHole', label: '開機：兔子洞', frames: 32 },
   { scene: 'bootSummon', label: '開機：召喚', frames: 28 },
   { scene: 'bootLoading', label: '開機：讀取', frames: 28 },
+  { scene: 'bootPray', label: '開機：少女祈禱中', frames: 32 },
   { scene: 'idle', label: '發呆', frames: EVERYDAY },
   { scene: 'think', label: '思考', frames: EVERYDAY },
   { scene: 'type', label: '打字', frames: EVERYDAY },
@@ -2238,6 +2757,9 @@ export const REEL: readonly { scene: SceneName; label: string; frames: number }[
   { scene: 'aqua', label: '阿克婭 cosplay', frames: 32 },
   { scene: 'excalibur', label: 'EX咖哩棒', frames: 56 },
   { scene: 'buster', label: '兔兔飛彈', frames: 64 },
+  { scene: 'spark', label: '魔理沙 cosplay', frames: 56 },
+  { scene: 'world', label: '咲夜 cosplay', frames: 48 },
+  { scene: 'lunatic', label: '鈴仙 cosplay', frames: 56 },
   { scene: 'transform', label: '變身', frames: 32 },
   { scene: 'blast', label: '全力全開', frames: 42 },
 ]

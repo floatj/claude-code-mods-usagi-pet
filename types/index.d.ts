@@ -17,6 +17,9 @@ export type Mood =
   | 'aqua'
   | 'excalibur'
   | 'buster'
+  | 'spark'
+  | 'world'
+  | 'lunatic'
 
 export type Bunny = {
   mood: Mood

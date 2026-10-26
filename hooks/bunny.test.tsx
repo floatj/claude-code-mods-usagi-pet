@@ -122,7 +122,7 @@ test('the pane draws the bunny and petting it shows love', async ($, on) => {
   }
 })
 
-test('the session clock moves her: booted up, slowly asleep, greeting you or transforming as a prompt wakes her, a blast or the buster after a long turn', async ($, on) => {
+test('the session clock moves her: booted up, slowly asleep, greeting you or transforming as a prompt wakes her, one of three beams after a long turn', async ($, on) => {
   const clock = mock.clock(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -144,7 +144,7 @@ test('the session clock moves her: booted up, slowly asleep, greeting you or tra
   }
 
   await clock.advance(FRAME_MS)
-  expect(await ui.find({ type: 'Text', text: /兔兔 啟動/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /兔兔 啟動|少女祈禱中/ })).toBeDefined()
   await clock.advance(5_400)
   expect(await ui.find({ type: 'Text', text: /睡著了/ })).toBeDefined()
   const asleep = await framesOver(16)
@@ -158,8 +158,8 @@ test('the session clock moves her: booted up, slowly asleep, greeting you or tra
 
   await clock.advance(120_000)
   await $.turn.complete({ reason: 'answered', turnId: 't1' } as never)
-  // A blast, or half the time the buster, which opens on READY.
-  expect(await ui.find({ type: 'Text', text: /全力全開|READY/ })).toBeDefined()
+  // One of three beams: the blast, the buster opening on READY, or the magician flying in.
+  expect(await ui.find({ type: 'Text', text: /全力全開|READY|普通的魔法使/ })).toBeDefined()
 })
 
 test('the play-all button plays every scene in turn, and stops when pressed again', async ($, on) => {

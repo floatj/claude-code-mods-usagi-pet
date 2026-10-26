@@ -1,4 +1,5 @@
 import type { Bunny, Mood } from '../types'
+import type { SceneName } from './scenes'
 
 // An idle rabbit dozes off at once: idle is only the moment before sleep.
 export const SLEEP_AFTER_MS = 0
@@ -22,6 +23,9 @@ const TTL: Partial<Record<Mood, number>> = {
   aqua: 4800,
   excalibur: 8400,
   buster: 9600,
+  spark: 8400,
+  world: 7200,
+  lunatic: 8400,
 }
 
 export const INITIAL: Bunny = {
@@ -75,6 +79,9 @@ export const COLOR: Record<Mood, string | undefined> = {
   aqua: 'blue',
   excalibur: 'yellow',
   buster: 'cyan',
+  spark: 'yellow',
+  world: 'blue',
+  lunatic: 'magenta',
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -92,7 +99,8 @@ const TOOL_LABEL: Record<string, string> = {
 // Frames each dot of the thinking caption takes to appear.
 const DOT_FRAMES = 4
 
-export const captionOf = (b: Bunny): string => {
+/** Her caption; `scene`, the one drawn, tells the boot screens apart. */
+export const captionOf = (b: Bunny, scene?: SceneName): string => {
   switch (b.mood) {
     case 'idle':
       return '發呆中'
@@ -117,7 +125,8 @@ export const captionOf = (b: Bunny): string => {
     case 'welcome':
       return '歡迎回來♡'
     case 'boot':
-      return '兔兔 啟動！'
+      // The land of illusions' own loading screen has its own words.
+      return scene === 'bootPray' ? (b.tick - b.moodTick < 24 ? '少女祈禱中…' : '祈禱完成！') : '兔兔 啟動！'
     case 'ditto':
       return '有兩個兔兔？'
     case 'mimikyu':
@@ -137,6 +146,24 @@ export const captionOf = (b: Bunny): string => {
       const p = b.tick - b.moodTick
 
       return p < 16 ? 'READY…' : p < 28 ? '集氣中…' : p < 34 ? '兔兔飛彈！' : p < 40 ? '欸？' : p < 52 ? '連射！' : '任務完成！'
+    }
+    case 'spark': {
+      // Her arrival, the charge, the beam, the smoke, and the books.
+      const p = b.tick - b.moodTick
+
+      return p < 8 ? '普通的魔法使來了' : p < 22 ? '戀符——' : p < 38 ? 'Master Spark！' : p < 46 ? '彈幕就是火力！' : '只是借走而已 DA☆ZE'
+    }
+    case 'world': {
+      // The watch, time stopped, the knives loosed, and tea.
+      const p = b.tick - b.moodTick
+
+      return p < 8 ? '女僕長登場' : p < 14 ? '幻世「The World」' : p < 28 ? '（停止的時間裡…）' : p < 34 ? '然後時間開始流動' : '紅茶泡好了，請慢用'
+    }
+    case 'lunatic': {
+      // The moon, her eyes, the illusion, its shots, its end, and rice cake.
+      const p = b.tick - b.moodTick
+
+      return p < 8 ? '月兔來了' : p < 14 ? '看著我的眼睛…' : p < 26 ? '幻波「赤眼催眠」' : p < 38 ? '狂氣的彈幕！' : p < 46 ? '…哪個才是真的？' : '還是搗年糕最療癒'
     }
   }
 }
