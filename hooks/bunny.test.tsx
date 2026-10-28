@@ -178,3 +178,106 @@ test('the play-all button plays every scene in turn, and stops when pressed agai
   expect(await ui.find({ type: 'Text', text: /▶ \d+\// })).toBeUndefined()
   await ui.unmount()
 })
+
+const BAND = {
+    component: 'AbovePrompt',
+    requestId: 'bunny-band',
+    props: { hasSurvey: false, isWorking: false, maxRows: 20, bodyColumns: 100, scroll: { offset: 0, bodyRows: 20 }, view: {} },
+  } as const
+
+test('a session after one that moved her above the prompt starts her there, her pane left shut', async ($, on) => {
+  mock.clock(on)
+  mock.store(on, { placement: 'band' })
+  const opened: string[] = []
+  on('command.register', () => ({ value: { command: 'bunny' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.open', (_, e) => {
+    opened.push(e.id)
+
+    return { value: { isPlaced: true } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(opened).toEqual([])
+  const band = await $.ui.mount({ plugin: 'bunny', surface: 'terminal', ...BAND })
+  expect(await band.find({ type: 'Text', text: /[▀▄█]/ })).toBeDefined()
+  await band.unmount()
+})
+
+test('/bunny 上方 moves her above the prompt and /bunny 側欄 back', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  const closed: string[] = []
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>beneath</Text>
+  })
+  const RUN = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
+  on('command.register', () => ({ value: { command: 'bunny' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', (_, e) => {
+    closed.push(e.id)
+
+    return { value: undefined }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect((await $.command.run({ command: 'bunny', args: '上方', ...RUN })).text).toMatch(/輸入框上方/)
+  expect(closed).toEqual(['bunny'])
+
+  const band = await $.ui.mount({ plugin: 'bunny', surface: 'terminal', ...BAND })
+  expect(await band.find({ type: 'Text', text: /[▀▄█]/ })).toBeDefined()
+  await band.press({ key: 'pet' })
+  expect(await band.find({ type: 'Text', text: /♡ × 1/ })).toBeDefined()
+
+  expect((await $.command.run({ command: 'bunny', args: '側欄', ...RUN })).text).toMatch(/兔兔來了/)
+  // Back in her pane she leaves the band to whatever draws beneath.
+  expect(await band.find({ type: 'Text', text: /^beneath$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /[▀▄█]/ })).toBeUndefined()
+  expect((await $.command.run({ command: 'bunny', args: '下面', ...RUN })).text).toMatch(/不認得/)
+  await band.unmount()
+})
+
+test('/bunny 合併 opens the dashboard and stands her under its drawing', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const ran: string[] = []
+  const RUN = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
+  on('command.register', () => ({ value: { command: 'bunny' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', () => ({ value: undefined }))
+  on('command.run', { command: 'dash' }, (_, e) => {
+    ran.push(e.command)
+
+    return { text: '儀表板開了' }
+  })
+  // The dashboard's own drawing, beneath her.
+  on('ui.render', { component: 'Pane', requestId: 'dash' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>計畫 1/3</Text>
+  })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect((await $.command.run({ command: 'bunny', args: '合併', ...RUN })).text).toMatch(/儀表板下面/)
+  await clock.advance(1)
+  expect(ran).toEqual(['dash'])
+
+  const dash = await $.ui.mount({
+    plugin: 'bunny',
+    surface: 'terminal',
+    ...PANE,
+    requestId: 'dash',
+    props: { ...PANE.props, title: '儀表板', bodyColumns: 44, scroll: { offset: 0, bodyRows: 40 } },
+  })
+  expect(await dash.find({ type: 'Text', text: /計畫 1\/3/ })).toBeDefined()
+  expect(await dash.find({ type: 'Text', text: /[▀▄█]/ })).toBeDefined()
+
+  await $.command.run({ command: 'bunny', args: '側欄', ...RUN })
+  expect(await dash.find({ type: 'Text', text: /計畫 1\/3/ })).toBeDefined()
+  expect(await dash.find({ type: 'Text', text: /[▀▄█]/ })).toBeUndefined()
+  await dash.unmount()
+})

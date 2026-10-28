@@ -69,6 +69,18 @@ const ending = (took: number, now: number): Mood => {
 // Painted over the whole body, so the pane is not the dock's gray.
 const BACKGROUND = '#000000'
 const pet = atom({ plugin: 'bunny', key: 'pet' } as const, INITIAL)
+// Where she shows: her pane, or the band above the prompt. Kept across
+// sessions in the store under this key.
+const PLACEMENT = 'placement'
+const placement = atom({ plugin: 'bunny', key: 'placement' } as const, 'pane')
+const SIDE_WORDS = ['側欄', 'pane', 'side']
+const BAND_WORDS = ['上方', 'band', 'top']
+const MERGED_WORDS = ['合併', 'merge', 'merged', 'dash']
+// Merged, she stands under the dashboard in its pane, these rows tall.
+const DASH_PANE = 'dash'
+// Her black ground under the dashboard, rows tall: she stands at its foot.
+const MERGED_ROWS = 16
+type Placement = 'pane' | 'band' | 'merged'
 
 // The spinner's word, read while it draws. State cannot be written during a
 // render, so it lives here; the frame clock's redraws pick it up.
@@ -127,15 +139,80 @@ const frame = async ($: EngineInterface) => {
   await update($, pet, one => step(one, now))
 }
 
+// Her stage as it stands, `width` cells wide: the rows, the caption and its color, and the reel if one plays.
+const staged = async ($: EngineInterface, width: number) => {
+  // A rabbit kept from before a reload may lack what was added since.
+  const b = { ...INITIAL, ...(await read($, pet)) }
+  const sky = skyAt(await $.clock.now())
+  // The reel, while it runs, plays in place of what she is doing; past its end it stops.
+  const reel = reelFrom === undefined ? undefined : reelAt(b.tick - reelFrom)
+  reelFrom = reel === undefined ? undefined : reelFrom
+  const scene = sceneOf(b, word, seed)
+  const stage = reel
+    ? frameRows(reel.scene, b.tick, width, reel.since, sky, weather)
+    : frameRows(scene, b.tick, width, b.tick - b.moodTick, sky, weather)
+
+  return {
+    b,
+    stage,
+    color: reel ? 'magenta' : COLOR[b.mood],
+    caption: reel ? `▶ ${reel.index + 1}/${REEL.length} ${reel.label}` : captionOf(b, scene),
+    isReeling: reel !== undefined,
+  }
+}
+
+const petHer = async ($: EngineInterface) => {
+  const now = await $.clock.now()
+  await update($, pet, one => ({
+    ...setMood(one, 'love', now),
+    pets: one.pets + 1,
+  }))
+  wake($)
+}
+
+// Play every scene from the first, or stop the one playing.
+const toggleReel = async ($: EngineInterface) => {
+  reelFrom = reelFrom === undefined ? (await read($, pet)).tick : undefined
+  await update($, pet, one => ({ ...one }))
+  wake($)
+}
+
+// Moves her to `where`, kept for the sessions after: her pane opens for the
+// pane and closes otherwise; merged, the dashboard is opened for her to stand under.
+const placeAt = async ($: EngineInterface, where: Placement) => {
+  await update($, placement, () => where)
+  await $.store.set(PLACEMENT, where).catch(() => undefined)
+
+  if (where === 'pane') {
+    return $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
+  }
+
+  await $.ui.close({ id: PANE })
+
+  // A command cannot run another while it holds the turn: the dashboard opens just after.
+  if (where === 'merged') {
+    $.clock.after(0, () => void $.command.run({ command: 'dash' }).catch(() => undefined))
+  }
+
+  return { isPlaced: true }
+}
+
 export const register: Register = on => {
   // Tool calls in flight: the bunny works until the last one answers.
   let running = 0
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'bunny',
-      description: '叫出兔兔 (open the bunny pane)',
+      description: '叫出兔兔 (open the bunny pane)；/bunny 上方、側欄 或 合併 換位置',
+      argumentHint: '[上方|側欄|合併]',
     })
-    void $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
+    const saved = await $.store.get(PLACEMENT).catch(() => undefined)
+    const where: Placement = saved === 'band' || saved === 'merged' ? saved : 'pane'
+    await update($, placement, () => where)
+
+    if (where === 'pane') {
+      void $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
+    }
     seed = Math.floor(await $.clock.now()) % 997
     // A new session boots her up; a reload, which finds her already going, does not.
     const now = await $.clock.now()
@@ -149,10 +226,34 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'bunny' }, async $ => {
-    const opened = await $.ui.open({ id: PANE, title: TITLE, columns: COLUMNS, rows: ROWS })
+  // Bare, she comes where she was last; named, she moves there and stays.
+  on('command.run', { command: 'bunny' }, async ($, e) => {
+    const arg = String(e.args ?? '').trim().toLowerCase()
+    const asked: Placement | undefined | null = SIDE_WORDS.includes(arg)
+      ? 'pane'
+      : BAND_WORDS.includes(arg)
+        ? 'band'
+        : MERGED_WORDS.includes(arg)
+          ? 'merged'
+          : arg === ''
+            ? undefined
+            : null
 
-    return { text: opened.isPlaced ? '兔兔來了 ( ·ω· )' : '兔兔現在出不來' }
+    if (asked === null) {
+      return { text: `不認得「${arg}」：用 /bunny 上方、/bunny 側欄 或 /bunny 合併` }
+    }
+
+    const where = asked ?? (await read($, placement))
+    const opened = await placeAt($, where)
+
+    if (!opened.isPlaced) {
+      return { text: '兔兔現在出不來' }
+    }
+
+    return {
+      text:
+        where === 'band' ? '兔兔在輸入框上方 ( ·ω· )' : where === 'merged' ? '兔兔在儀表板下面 ( ·ω· )' : '兔兔來了 ( ·ω· )',
+    }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -220,19 +321,8 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const { bodyColumns, scroll } = e.props
-
-    // A rabbit kept from before a reload may lack what was added since.
-    const b = { ...INITIAL, ...(await read($, pet)) }
     const width = Math.max(1, Math.min(bodyColumns, MAX_STAGE))
-    const sky = skyAt(await $.clock.now())
-    // The reel, while it runs, plays in place of what she is doing; past its end it stops.
-    const reel = reelFrom === undefined ? undefined : reelAt(b.tick - reelFrom)
-    reelFrom = reel === undefined ? undefined : reelFrom
-    const scene = sceneOf(b, word, seed)
-    const stage = reel
-      ? frameRows(reel.scene, b.tick, width, reel.since, sky, weather)
-      : frameRows(scene, b.tick, width, b.tick - b.moodTick, sky, weather)
-    const color = reel ? 'magenta' : COLOR[b.mood]
+    const { b, stage, color, caption, isReeling } = await staged($, width)
 
     return (
       <Box
@@ -257,35 +347,107 @@ export const register: Register = on => {
           ))}
         </Box>
         <Text key="caption" color={color}>
-          {reel ? `▶ ${reel.index + 1}/${REEL.length} ${reel.label}` : captionOf(b, scene)}
+          {caption}
         </Text>
         <Box gap={1}>
-          <Button
-            key="pet"
-            label="♡"
-            hotkey="p"
-            onPress={async () => {
-              const now = await $.clock.now()
-              await update($, pet, one => ({
-                ...setMood(one, 'love', now),
-                pets: one.pets + 1,
-              }))
-              wake($)
-            }}
-          />
-          <Button
-            key="reel"
-            label={reel ? '■' : '▶'}
-            hotkey="r"
-            onPress={async () => {
-              // Play every scene from the first, or stop the one playing.
-              reelFrom = reelFrom === undefined ? (await read($, pet)).tick : undefined
-              await update($, pet, one => ({ ...one }))
-              wake($)
-            }}
-          />
+          <Button key="pet" label="♡" hotkey="p" onPress={() => petHer($)} />
+          <Button key="reel" label={isReeling ? '■' : '▶'} hotkey="r" onPress={() => toggleReel($)} />
         </Box>
         {b.pets > 0 && <Text dimColor>♡ × {b.pets}</Text>}
+        </Box>
+      </Box>
+    )
+  })
+
+  // Merged, she wraps the dashboard's drawing: it above, clipped to the room
+  // her rows leave, and she fixed at the bottom. The dashboard's own scroll
+  // moves the whole tree, so what does not fit is cut, not scrolled.
+  on('ui.render', { component: 'Pane', requestId: DASH_PANE }, async ($, e, next) => {
+    const above = await next(e)
+
+    if ((await read($, placement)) !== 'merged') {
+      return above
+    }
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const { bodyColumns, scroll } = e.props
+    const width = Math.max(1, Math.min(bodyColumns, MAX_STAGE))
+    const { b, stage, color, caption, isReeling } = await staged($, width)
+
+    return (
+      <Box flexDirection="column" width={bodyColumns} height={scroll.bodyRows} backgroundColor={BACKGROUND}>
+        <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+          {/* At its own height, so a long dashboard is cut at the bottom, not squeezed. */}
+          <Box flexDirection="column" flexShrink={0}>
+            {above}
+          </Box>
+        </Box>
+        <Box
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="flex-end"
+          flexShrink={0}
+          width={bodyColumns}
+          height={Math.min(MERGED_ROWS, scroll.bodyRows)}
+          backgroundColor={BACKGROUND}
+        >
+          <Box flexDirection="column" width={width} height={STAGE_ROWS}>
+            {stage.map(runs => (
+              <Text>
+                {runs.map(run => (
+                  <Text color={run.color} backgroundColor={run.bg ?? BACKGROUND}>
+                    {run.text}
+                  </Text>
+                ))}
+              </Text>
+            ))}
+          </Box>
+          <Box gap={1}>
+            <Text key="caption" color={color}>
+              {caption}
+            </Text>
+            <Button key="pet" label="♡" hotkey="p" onPress={() => petHer($)} />
+            <Button key="reel" label={isReeling ? '■' : '▶'} hotkey="r" onPress={() => toggleReel($)} />
+            {b.pets > 0 && <Text dimColor>× {b.pets}</Text>}
+          </Box>
+        </Box>
+      </Box>
+    )
+  })
+
+  // Above the prompt she stands on the left, her caption and buttons beside
+  // her, as tall as her stage. A survey there has the band to itself.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || (await read($, placement)) !== 'band') {
+      return next(e)
+    }
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const width = Math.max(1, Math.min(e.props.bodyColumns - 12, MAX_STAGE))
+    const { b, stage, color, caption, isReeling } = await staged($, width)
+
+    return (
+      <Box flexDirection="row" gap={2} height={STAGE_ROWS}>
+        <Box flexDirection="column" width={width} height={STAGE_ROWS} backgroundColor={BACKGROUND}>
+          {stage.map(runs => (
+            <Text>
+              {runs.map(run => (
+                <Text color={run.color} backgroundColor={run.bg ?? BACKGROUND}>
+                  {run.text}
+                </Text>
+              ))}
+            </Text>
+          ))}
+        </Box>
+        <Box flexDirection="column" justifyContent="flex-end" flexShrink={1}>
+          <Text key="caption" color={color} wrap="wrap">
+            {caption}
+          </Text>
+          <Box gap={1}>
+            <Button key="pet" label="♡" hotkey="p" onPress={() => petHer($)} />
+            <Button key="reel" label={isReeling ? '■' : '▶'} hotkey="r" onPress={() => toggleReel($)} />
+          </Box>
+          {b.pets > 0 && <Text dimColor>♡ × {b.pets}</Text>}
         </Box>
       </Box>
     )

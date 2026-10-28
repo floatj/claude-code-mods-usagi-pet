@@ -40,6 +40,10 @@ export type Bunny = {
 
 declare module 'claude-code' {
   interface PluginState {
-    bunny: { pet: Bunny }
+    bunny: {
+      pet: Bunny
+      /** Where she shows: her pane, the band above the prompt, or under the dashboard in its pane. */
+      placement: 'pane' | 'band' | 'merged'
+    }
   }
 }
